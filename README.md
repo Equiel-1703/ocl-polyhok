@@ -1,1 +1,1 @@
-# ocl-polyhok
+# OCL-PolyHok: An OpenCL backend for PolyHok
