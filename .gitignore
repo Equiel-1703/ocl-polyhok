@@ -1,10 +1,17 @@
-/_build
-/cover
-/deps
-/doc
+# Ignore Erlang specific files
 /.fetch
 erl_crash.dump
 *.ez
 *.beam
 /config/*.secret.exs
+
+# Ignore Elixir specific files
+mix.lock
 .elixir_ls/
+/_build
+/cover
+/deps
+/doc
+
+# Ignore compiled libraries
+/priv/gpu_nifs.so
