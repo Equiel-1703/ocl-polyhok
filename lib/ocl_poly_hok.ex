@@ -1063,9 +1063,10 @@ defmodule OCLPolyHok do
     - `l`: A list of arguments to be passed to the kernel.
   """
   def spawn(k, t, b, l) do
-    # prev = System.monotonic_time()
+    # Get kernel name from the kernel function reference.
     kernel_name = JIT.get_kernel_name(k)
 
+    # Load, from the module_server, the AST and function graph for the kernel.
     {kast, fun_graph} =
       case load_ast(k) do
         {a, g} -> {a, g}

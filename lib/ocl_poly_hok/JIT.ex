@@ -260,7 +260,7 @@ defmodule JIT do
   end
 
   @doc """
-  Finds the types of the actual parameters and generates a maping of formal parameters to their types
+  Finds the types of the actual parameters and generates a maping of formal parameters to their respective inferred types.
   """
   def gen_types_delta({:defk, _, [header, [_body]]}, actual_param) do
     {_, _, formal_para} = header
