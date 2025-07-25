@@ -1,3 +1,7 @@
+# Ignore VSCode files
+.vscode/
+.vscode-test/
+
 # Ignore Erlang specific files
 /.fetch
 erl_crash.dump
