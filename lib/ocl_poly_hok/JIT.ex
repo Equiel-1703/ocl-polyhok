@@ -183,6 +183,11 @@ defmodule JIT do
     |> Enum.map(fn x -> Kernel.to_charlist(to_string(x)) end)
   end
 
+  @doc """
+  Returns a list of tuples {name, type} of all formal parameters that are functions.
+
+  In spawn/4, we need to identify the functions passed as arguments and their types, so that the JIT can compile each one correctly.
+  """
   def get_function_parameters_and_their_types({:defk, _, [header, [_body]]}, actual_para, delta) do
     {_, _, formal_para} = header
 
@@ -254,7 +259,9 @@ defmodule JIT do
     OCLPolyHok.TypeInference.type_check(delta, body)
   end
 
-  # finds the types of the actual parameters and generates a maping of formal parameters to their types
+  @doc """
+  Finds the types of the actual parameters and generates a maping of formal parameters to their types
+  """
   def gen_types_delta({:defk, _, [header, [_body]]}, actual_param) do
     {_, _, formal_para} = header
     types = infer_types_actual_parameters(actual_param)

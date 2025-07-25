@@ -12,6 +12,7 @@ defmodule OCLPolyHok do
       :ok ->
         IO.puts("gpu_nifs loaded successfully")
         :ok
+
       {:error, reason} ->
         IO.puts("Failed to load NIF: #{inspect(reason)}")
         :erlang.nif_error(reason)
@@ -45,6 +46,7 @@ defmodule OCLPolyHok do
                   unquote(body)
                 end)
               )
+
     r
   end
 
@@ -63,6 +65,7 @@ defmodule OCLPolyHok do
                   unquote(body)
                 end)
               )
+
     r
   end
 
@@ -90,6 +93,7 @@ defmodule OCLPolyHok do
                   unquote(body)
                 end)
               )
+
     r
   end
 
@@ -757,16 +761,16 @@ defmodule OCLPolyHok do
     - Raises an error if an unknown message is received from the `:module_server`.
   """
   def load_ast(kernel) do
+    # The function receives a kernel function reference (like `&Module.function/arity`), so we need to extract
+    # the module and function name from it.
+    # The Macro.escape is used to convert the function reference into a form that can be pattern matched.
+    # The pattern matching extracts the module and function name from the function reference.
     {_module, f_name} =
-      # The function receives a kernel function reference (like `&Module.function/arity`), so we need to extract
-      # the module and function name from it.
-      # The Macro.escape is used to convert the function reference into a form that can be pattern matched.
-      # The pattern matching extracts the module and function name from the function reference.
       case Macro.escape(kernel) do
         {:&, [], [{:/, [], [{{:., [], [module, f_name]}, [no_parens: true], []}, _nargs]}]} ->
           {module, f_name}
 
-      # This fallback is not doing anything useful, but it is here to handle cases where the pattern matching fails.
+        # This fallback is not doing anything useful, but it is here to handle cases where the pattern matching fails.
         f ->
           {:ok, f}
       end
@@ -1048,6 +1052,16 @@ defmodule OCLPolyHok do
   ######## at compilation we build a representation for the kernel: {:ker, its type, its ast}
   ##### and leave a call to spawn
 
+  @doc """
+  Generates the OpenCL kernel code for the given kernel, compiles it, and queues it for execution.
+
+  ## Parameters
+
+    - `k`: The kernel function to be compiled and executed.
+    - `t`: The work group size in each dimension (a.k.a number of blocks).
+    - `b`: A list containing the number of work items in each dimension (a.k.a threads per block).
+    - `l`: A list of arguments to be passed to the kernel.
+  """
   def spawn(k, t, b, l) do
     # prev = System.monotonic_time()
     kernel_name = JIT.get_kernel_name(k)
@@ -1058,37 +1072,56 @@ defmodule OCLPolyHok do
         nil -> raise "Unknown kernel #{inspect(kernel_name)}"
       end
 
+    # Generates a map called 'delta' that maps formal parameters of the kernel to the inferred types
+    # of the actual parameters passed to the kernel (contained in the list `l`).
     delta = JIT.gen_types_delta(kast, l)
-    # IO.inspect "Delta: #{inspect delta}"
+
+    # Infers the types of the kernel's variables and functions based on the AST and the delta map inferred above.
     inf_types = JIT.infer_types(kast, delta)
-    # IO.inspect "inf type: #{inspect inf_types}"
-    # raise "hell"
+
+    #  Returns a map of formal parameters that are functions (like lambdas or functions references)
+    # and their actual names. This is needed so spawn can compile the functions and pass them to the kernel.
     subs = JIT.get_function_parameters(kast, l)
-    # IO.inspect subs
+
+    # Compiles the kernel AST into a string representation of the OpenCL code. The inferred types are used
+    # to generate the correct OpenCL types for the kernel parameters. The `subs` map is used to replace
+    # function parameters with their actual names in the generated code.
     kernel = JIT.compile_kernel(kast, inf_types, subs)
-    # IO.inspect "kernel: #{inspect kernel}"
+
+    # Similar to `get_function_parameters`, but this function returns a list of tuples where the first element
+    # is the actual name of the function and the second element is its inferred type.
     funs = JIT.get_function_parameters_and_their_types(kast, l, inf_types)
 
+    # Takes the function graph and the inferred types, and returns a list of tuples where each tuple contains
+    # a function name and its inferred type. This is used to compile the functions that are not directly
+    # passed as arguments to the kernel, but are used within the kernel.
     other_funs =
       fun_graph
       |> Enum.map(fn x -> {x, inf_types[x]} end)
       |> Enum.filter(fn {_, i} -> i != nil end)
 
-    # IO.inspect funs
-    # IO.inspect other_funs
+    # Compiles the functions and other functions that are used within the kernel. The `JIT.compile_function/1`
+    # function takes a tuple where the first element is the function name and the second element is its inferred type.
+    # The result is a list of CUDA-generated functions that can be executed on the GPU.
     comp = Enum.map(funs ++ other_funs, &JIT.compile_function/1)
     comp = Enum.reduce(comp, [], fn x, y -> y ++ x end)
-    # IO.puts comp
+
+    # The `JIT.get_includes/0` function returns a list of OpenCL include CUDA code that
+    # will be prepended to the generated kernel code.
     includes = JIT.get_includes()
     prog = [includes | comp] ++ [kernel]
 
+    # Here we are concatenating the generated OpenCL code into a single string.
     prog = Enum.reduce(prog, "", fn x, y -> y <> x end)
 
+    # 'args' is a list of the actual arguments passed to the kernel, processed to remove any function references
     args = process_args_no_fun(l)
+    # 'types_args' is a list of the inferred types of the actual arguments passed to the kernel (excluding functions).
     types_args = JIT.get_types_para(kast, inf_types)
 
-    IO.inspect prog
-
+    IO.inspect(prog)
+    IO.inspect(args)
+    IO.inspect(types_args)
 
     # jit_compile_and_launch_nif(
     #   Kernel.to_charlist(kernel_name),
