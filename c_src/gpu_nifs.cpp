@@ -457,20 +457,18 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
 ////////
 ///////////////////
 
+// This function retrieves the OpenCL array from the device and returns it to the host as an Erlang term.
 static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-  int nrow;
-  int ncol;
+  int nrow, ncol;
+  size_t data_size;
   char type_name[1024];
   ERL_NIF_TERM result;
 
-  CUdeviceptr dev_array;
-  CUresult err;
+  cl::Buffer dev_array;
+  cl::Buffer *array_res = nullptr;
 
-  init_cuda(env);
-  // printf("entrou get array\n");
-  CUdeviceptr *array_res;
-
+  // Get the Buffer resource to copy data from
   if (!enif_get_resource(env, argv[0], ARRAY_TYPE, (void **)&array_res))
   {
     return enif_make_badarg(env);
@@ -478,16 +476,19 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int argc, const ERL_NIF_TE
 
   dev_array = *array_res;
 
+  // Get number of rows
   if (!enif_get_int(env, argv[1], &nrow))
   {
     return enif_make_badarg(env);
   }
 
+  // Get number of columns
   if (!enif_get_int(env, argv[2], &ncol))
   {
     return enif_make_badarg(env);
   }
 
+  // Get type name
   ERL_NIF_TERM e_type_name = argv[3];
   unsigned int size_type_name;
   if (!enif_get_list_length(env, e_type_name, &size_type_name))
@@ -497,87 +498,41 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int argc, const ERL_NIF_TE
 
   enif_get_string(env, e_type_name, type_name, size_type_name + 1, ERL_NIF_LATIN1);
 
+  // Calculating the size of the result
   if (strcmp(type_name, "float") == 0)
   {
-
-    int result_size = sizeof(float) * (nrow * ncol);
-    int data_size = sizeof(float) * (nrow * ncol);
-    float *result_data = (float *)enif_make_new_binary(env, result_size, &result);
-
-    float *ptr_matrix;
-    ptr_matrix = result_data;
-
-    //// MAKE CUDA CALL
-    err = cuMemcpyDtoH(ptr_matrix, dev_array, data_size);
-
-    if (err != CUDA_SUCCESS)
-    {
-      char message[200];
-      const char *error;
-      cuGetErrorString(err, &error);
-      strcpy(message, "Error (get_gpu_array_nif): error compying data from device to host: ");
-      strcat(message, error);
-      enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
-    }
-    //////// END CUDA CALL
+    data_size = sizeof(float) * nrow * ncol;
   }
   else if (strcmp(type_name, "int") == 0)
   {
-
-    int result_size = sizeof(int) * (nrow * ncol);
-    int data_size = sizeof(int) * (nrow * ncol);
-    int *result_data = (int *)enif_make_new_binary(env, result_size, &result);
-
-    int *ptr_matrix;
-    ptr_matrix = result_data;
-
-    //// MAKE CUDA CALL
-    // printf("cuda get\n");
-    // printf("pointer %p\n",dev_array);
-    err = cuMemcpyDtoH(ptr_matrix, dev_array, data_size);
-
-    if (err != CUDA_SUCCESS)
-    {
-      char message[200]; // printf("cuda get\n");
-      const char *error;
-      cuGetErrorString(err, &error);
-      strcpy(message, "Error (get_gpu_array_nif) copying data from device to host: ");
-      strcat(message, error);
-      enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
-    }
-    //////// END CUDA CALL
+    data_size = sizeof(int) * nrow * ncol;
   }
   else if (strcmp(type_name, "double") == 0)
   {
-
-    int result_size = sizeof(double) * (nrow * ncol);
-    int data_size = sizeof(double) * (nrow * ncol);
-    double *result_data = (double *)enif_make_new_binary(env, result_size, &result);
-
-    double *ptr_matrix;
-    ptr_matrix = result_data;
-
-    //// MAKE CUDA CALL
-    err = cuMemcpyDtoH(ptr_matrix, dev_array, data_size);
-
-    if (err != CUDA_SUCCESS)
-    {
-      char message[200];
-      const char *error;
-      cuGetErrorString(err, &error);
-      strcpy(message, "Error (get_gpu_array_nif) copying data from device to host: ");
-      strcat(message, error);
-      enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
-    }
-    //////// END CUDA CALL
+    data_size = sizeof(double) * nrow * ncol;
   }
-  else /* default: */
+  else // Unknown type
   {
     char message[200];
-    strcpy(message, "Error (get_gpu_array_nif) copying data from device to host: ");
+    strcpy(message, "[ERROR] (get_gpu_array_nif) copying data from device to host: unknown type ");
     strcat(message, type_name);
     enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
   }
+
+  // Allocate memory in host for the result
+  void *host_result_data = (void *)enif_make_new_binary(env, data_size, &result);
+
+  // Copying data from device to host
+  try
+  {
+    open_cl->readBuffer(dev_array, host_result_data, data_size);
+  }
+  catch (const std::exception &e)
+  {
+    std::cerr << "[ERROR] (get_gpu_array_nif) copying data from device to host: " << e.what() << std::endl;
+    enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
+  }
+
   return result;
 }
 
@@ -738,7 +693,7 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int argc, const ERL_
   return term;
 }
 
-/// Creates a new GPU array with the specified number of rows, columns, and type
+// Creates a new GPU array with the specified number of rows, columns, and type
 static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
   int nrow, ncol;
@@ -1640,8 +1595,8 @@ static ERL_NIF_TERM spawn_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[
 
 static ErlNifFunc nif_funcs[] = {
     {"jit_compile_and_launch_nif", 7, jit_compile_and_launch_nif},
-    {"new_gpu_array_nif", 3, new_gpu_array_nif},
-    {"get_gpu_array_nif", 4, get_gpu_array_nif},
+    {"new_gpu_array_nif", 3, new_gpu_array_nif}, // OK
+    {"get_gpu_array_nif", 4, get_gpu_array_nif}, // OK
     {"create_gpu_array_nx_nif", 4, create_gpu_array_nx_nif},
     {"load_kernel_nif", 2, load_kernel_nif},
     {"load_fun_nif", 2, load_fun_nif},
