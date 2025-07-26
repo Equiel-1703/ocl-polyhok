@@ -536,30 +536,33 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int argc, const ERL_NIF_TE
   return result;
 }
 
+// This function creates a new GPU array with the specified number of rows, columns, and type.
+// It allocates memory on the GPU and copies the data from the host array passed to the device.
 static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-  ErlNifBinary array_el;
-
   int nrow, ncol;
+  size_t data_size;
+  ErlNifBinary host_array_el;
+  cl::Buffer dev_array;
+  ERL_NIF_TERM result_term;
 
-  CUresult err;
-  CUdeviceptr dev_array;
-
-  init_cuda(env);
-
-  if (!enif_inspect_binary(env, argv[0], &array_el))
+  // Get the host array binary
+  if (!enif_inspect_binary(env, argv[0], &host_array_el))
     return enif_make_badarg(env);
 
+  // Get number of rows
   if (!enif_get_int(env, argv[1], &nrow))
   {
     return enif_make_badarg(env);
   }
 
+  // Get number of columns
   if (!enif_get_int(env, argv[2], &ncol))
   {
     return enif_make_badarg(env);
   }
 
+  // Get type name
   ERL_NIF_TERM e_type_name = argv[3];
   unsigned int size_type_name;
   if (!enif_get_list_length(env, e_type_name, &size_type_name))
@@ -568,129 +571,48 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int argc, const ERL_
   }
 
   char type_name[1024];
-
   enif_get_string(env, e_type_name, type_name, size_type_name + 1, ERL_NIF_LATIN1);
 
-  // FINAL TERM TO BE RETURNED:
-  ERL_NIF_TERM term;
-
+  // Calculates the size of the data to be copied to the GPU
   if (strcmp(type_name, "float") == 0)
   {
-
-    float *array;
-
-    array = (float *)array_el.data;
-
-    size_t data_size = sizeof(float) * ncol * nrow;
-    // printf("size float: %d data size: %d\n", sizeof(float),data_size);
-    ///// MAKE CUDA CALL
-    err = cuMemAlloc(&dev_array, data_size);
-
-    if (err != CUDA_SUCCESS)
-    {
-      char message[200];
-      const char *error;
-      cuGetErrorString(err, &error);
-      // printf("nrow %d ncol %d size %d size bytes %d\n", nrow, ncol,nrow*ncol, data_size);
-      strcpy(message, "Error (create_gpu_array_nx_nif:) cuMemAlloc size: %d");
-      strcat(message, error);
-      enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
-    }
-    ///// MAKE CUDA CALL
-    err = cuMemcpyHtoD(dev_array, array, data_size);
-    if (err != CUDA_SUCCESS)
-    {
-      char message[200];
-      const char *error;
-      cuGetErrorString(err, &error);
-      strcpy(message, "Error create_gpu_array_nx_nif: ");
-      strcat(message, error);
-      enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
-    }
-
-    /////////// END CUDA CALL
+    data_size = sizeof(float) * ncol * nrow;
   }
   else if (strcmp(type_name, "int") == 0)
   {
-    int *array;
-    array = (int *)array_el.data;
-
-    size_t data_size = sizeof(int) * ncol * nrow;
-
-    ///// MAKE CUDA CALL
-    err = cuMemAlloc(&dev_array, data_size);
-
-    if (err != CUDA_SUCCESS)
-    {
-      char message[200];
-      const char *error;
-      cuGetErrorString(err, &error);
-      strcpy(message, "Error create_gpu_array_nx_nif1: ");
-      strcat(message, error);
-      enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
-    }
-    ///// MAKE CUDA CALL
-    err = cuMemcpyHtoD(dev_array, array, data_size);
-    if (err != CUDA_SUCCESS)
-    {
-      char message[200];
-      const char *error;
-      cuGetErrorString(err, &error);
-      strcpy(message, "Error create_gpu_array_nx_nif2: ");
-      strcat(message, error);
-      enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
-    }
-
-    /////////// END CUDA CALL
+    data_size = sizeof(int) * ncol * nrow;
   }
   else if (strcmp(type_name, "double") == 0)
   {
-    double *array;
-
-    array = (double *)array_el.data;
-
-    size_t data_size = sizeof(double) * ncol * nrow;
-
-    err = cuMemAlloc(&dev_array, data_size);
-    if (err != CUDA_SUCCESS)
-    {
-      char message[200];
-      const char *error;
-      cuGetErrorString(err, &error);
-      strcpy(message, "Error create_gpu_array_nx_nif1: ");
-      strcat(message, error);
-      enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
-    }
-    ///// MAKE CUDA CALL
-    err = cuMemcpyHtoD(dev_array, array, data_size);
-    if (err != CUDA_SUCCESS)
-    {
-      char message[200];
-      const char *error;
-      cuGetErrorString(err, &error);
-      strcpy(message, "Error create_gpu_array_nx_nif2: ");
-      strcat(message, error);
-      enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
-    }
-
-    /////////// END CUDA CALL
+    data_size = sizeof(double) * ncol * nrow;
   }
-  /* more else if clauses */
-  else /* default: */
+  else // Unknown type
   {
-
     char message[200];
-    strcpy(message, "Error create_gpu_array_nx_nif: unknown type: ");
+    strcpy(message, "[ERROR] (create_gpu_array_nx_nif): unknown type ");
     strcat(message, type_name);
     enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
   }
 
-  CUdeviceptr *gpu_res = (CUdeviceptr *)enif_alloc_resource(ARRAY_TYPE, sizeof(CUdeviceptr));
+  // Allocate memory on the GPU and copy the data from the host array
+  // Note: The host_array_el.data is a pointer to the data in the Erlang binary
+  try
+  {
+    dev_array = open_cl->createBuffer(data_size, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, (void *)host_array_el.data);
+  }
+  catch (const std::exception &e)
+  {
+    std::cerr << "[ERROR] (create_gpu_array_nx_nif) creating GPU buffer: " << e.what() << std::endl;
+    enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
+  }
+
+  cl::Buffer *gpu_res = (cl::Buffer *)enif_alloc_resource(ARRAY_TYPE, sizeof(cl::Buffer));
   *gpu_res = dev_array;
-  term = enif_make_resource(env, gpu_res);
+  result_term = enif_make_resource(env, gpu_res);
   // ...and release the resource so that it will be freed when Erlang garbage collects
   enif_release_resource(gpu_res);
-  return term;
+
+  return result_term;
 }
 
 // Creates a new GPU array with the specified number of rows, columns, and type
@@ -722,7 +644,7 @@ static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int argc, const ERL_NIF_TE
     return enif_make_badarg(env);
   }
 
-  // Allocate a buffer to hold the type name
+  // Create a buffer to hold the type name
   // We add 1 to the size to accommodate the null terminator
   // Note: ERL_NIF_LATIN1 is used for encoding the string
   char type_name[1024];
