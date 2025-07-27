@@ -1343,36 +1343,44 @@ static ERL_NIF_TERM synchronize_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM
   return enif_make_int(env, 0);
 }
 
+// Loads a kernel invocation function from a shared library and returns a 
+// resource that holds the function pointer
 static ERL_NIF_TERM load_kernel_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-
   ERL_NIF_TERM e_name_module = argv[0];
   ERL_NIF_TERM e_name_fun = argv[1];
 
+  // Get length of the module and function names
   unsigned int size_name_module;
   unsigned int size_name_fun;
 
   enif_get_list_length(env, e_name_fun, &size_name_fun);
   enif_get_list_length(env, e_name_module, &size_name_module);
 
+  // Create buffers to hold the names
   char kernel_name[1024];
   char func_name[1024];
   char lib_name[1024];
   char module_name[1024];
 
+  // Get the names from the Erlang terms as strings
   enif_get_string(env, e_name_fun, kernel_name, size_name_fun + 1, ERL_NIF_LATIN1);
   enif_get_string(env, e_name_module, module_name, size_name_module + 1, ERL_NIF_LATIN1);
 
+  // The function name to make the kernel invocation is constructed 
+  // by appending "_call" to the kernel name. Ex: the "vector_add" kernel
+  // will have the function name "vector_add_call" in the shared library.
   strcpy(func_name, kernel_name);
   strcat(func_name, "_call");
+
+  // The library name is constructed by appending ".so" to the module name
+  // and prefixing it with "priv/". Ex: the "math" module will have the library
+  // name "priv/math.so".
   strcpy(lib_name, "priv/");
   strcat(lib_name, module_name);
   strcat(lib_name, ".so");
 
-  // printf("libname %s\n",lib_name);
-  // printf("func name a %s\n",func_name);
-  // printf("module name %s\n", module_name);
-
+  // Opening the shared library using dlopen
   void *m_handle = dlopen(lib_name, RTLD_NOW);
   if (m_handle == NULL)
   {
@@ -1383,8 +1391,7 @@ static ERL_NIF_TERM load_kernel_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM
     return enif_make_int(env, 0);
   }
 
-  // printf("Pointer %p\n",m_handle);
-
+  // Getting the function pointer for the kernel call from the shared library using dlsym
   void (*fn)();
   fn = (void (*)())dlsym(m_handle, func_name);
 
@@ -1399,10 +1406,8 @@ static ERL_NIF_TERM load_kernel_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM
     return enif_make_int(env, 0);
   }
 
+  // Creating a resource to hold the function pointer
   void (**kernel_res)() = (void (**)())enif_alloc_resource(KERNEL_TYPE, sizeof(void *));
-
-  // Let's create conn and let the resource point to it
-
   *kernel_res = fn;
 
   // We can now make the Erlang term that holds the resource...
@@ -1413,26 +1418,37 @@ static ERL_NIF_TERM load_kernel_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM
   return term;
 }
 
+// Loads a pointer to a device function that will be used in a kernel. The term returned
+// is a resource that holds the pointer for the device function.
 static ERL_NIF_TERM load_fun_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-
   ERL_NIF_TERM e_name_module = argv[0];
   ERL_NIF_TERM e_name_fun = argv[1];
 
+  // Get length of the module and function names
   unsigned int size_name_module;
   unsigned int size_name_fun;
 
   enif_get_list_length(env, e_name_fun, &size_name_fun);
   enif_get_list_length(env, e_name_module, &size_name_module);
 
+  // Create buffers to hold the names
   char kernel_name[1024];
   char func_name[1024];
   char lib_name[1024];
   char module_name[1024];
 
+  // Get the names from the Erlang terms as strings
   enif_get_string(env, e_name_fun, kernel_name, size_name_fun + 1, ERL_NIF_LATIN1);
   enif_get_string(env, e_name_module, module_name, size_name_module + 1, ERL_NIF_LATIN1);
 
+  // Here we want from the shared library a function that returns a pointer to the device
+  // function that will be used. For doing so, we construct the function name by appending
+  // "get_" to the function name provided by the user, and "_ptr" to the end.
+  // Ex: the "vector_add" function will have the name "get_vector_add_ptr" in the shared
+  // library.
+  // The library name is constructed by appending ".so" to the module name and prefixing
+  // it with "priv/". Ex: the "math" module will have the library name "priv/math.so".
   strcpy(func_name, "get_");
   strcat(func_name, kernel_name);
   strcat(func_name, "_ptr");
@@ -1440,8 +1456,7 @@ static ERL_NIF_TERM load_fun_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM ar
   strcat(lib_name, module_name);
   strcat(lib_name, ".so");
 
-  // printf("libname %s\n",lib_name);
-
+  // Opening the shared library using dlopen
   void *m_handle = dlopen(lib_name, RTLD_NOW);
   if (m_handle == NULL)
   {
@@ -1451,14 +1466,10 @@ static ERL_NIF_TERM load_fun_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM ar
     return enif_make_int(env, 0);
   }
 
-  // printf("Pointer %p\n",m_handle);
-
-  // printf("function name %s \nlib name %s pointer %p\n", func_name, lib_name, m_handle);
-
+  // Creating the function pointer and getting the function pointer for the ptr call
+  // using dlsym
   void *(*fn)();
   fn = (void *(*)())dlsym(m_handle, func_name);
-
-  // printf("pointer function a %p %li\n",fn, (long int) fn);
 
   if (fn == NULL)
   {
@@ -1471,25 +1482,20 @@ static ERL_NIF_TERM load_fun_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM ar
     return enif_make_int(env, 0);
   }
 
+  // Now we can call the function to get the pointer to the device function
   void *ptr = fn();
 
-  /// printf("function pointer %p\n",ptr);
-
+  // Creating a resource to hold the pointer to the device function
   void **kernel_res = (void **)enif_alloc_resource(KERNEL_TYPE, sizeof(void *));
 
-  // Let's create conn and let the resource point to it
-
+  // We store the pointer to the device function in the resource
   *kernel_res = ptr;
-
-  // printf("kernel resource %p\n", *kernel_res);
-  // printf("erlang resource %p\n", kernel_res);
 
   // We can now make the Erlang term that holds the resource...
   ERL_NIF_TERM term = enif_make_resource(env, kernel_res);
   // ...and release the resource so that it will be freed when Erlang garbage collects
   enif_release_resource(kernel_res);
-  // printf("saiu\n");
-  // printf("term %p\n", term);
+
   return term;
 }
 
@@ -1519,9 +1525,9 @@ static ErlNifFunc nif_funcs[] = {
     {"jit_compile_and_launch_nif", 7, jit_compile_and_launch_nif},
     {"new_gpu_array_nif", 3, new_gpu_array_nif}, // OK
     {"get_gpu_array_nif", 4, get_gpu_array_nif}, // OK
-    {"create_gpu_array_nx_nif", 4, create_gpu_array_nx_nif},
-    {"load_kernel_nif", 2, load_kernel_nif},
-    {"load_fun_nif", 2, load_fun_nif},
+    {"create_gpu_array_nx_nif", 4, create_gpu_array_nx_nif}, // OK
+    {"load_kernel_nif", 2, load_kernel_nif}, // OK (no need to traslate)
+    {"load_fun_nif", 2, load_fun_nif}, // OK (no need to translate)
     {"new_pinned_nif", 2, new_pinned_nif},
     {"new_gmatrex_pinned_nif", 1, new_gmatrex_pinned_nif},
     {"spawn_nif", 4, spawn_nif},
