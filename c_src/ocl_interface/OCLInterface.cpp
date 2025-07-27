@@ -1,7 +1,5 @@
 #include "OCLInterface.hpp"
 
-#include <stdexcept>
-
 OCLInterface::OCLInterface()
 {
     // Initialize OpenCL interface with null pointers for
@@ -177,12 +175,12 @@ void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_r
     std::cout << "OpenCL kernel executed successfully." << std::endl;
 }
 
-void OCLInterface::readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size)
+void OCLInterface::readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, size_t offset)
 {
-    this->command_queue.enqueueReadBuffer(buffer, CL_TRUE, 0, size, host_ptr);
+    this->command_queue.enqueueReadBuffer(buffer, CL_TRUE, offset, size, host_ptr);
 }
 
-void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size)
+void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset)
 {
-    this->command_queue.enqueueWriteBuffer(buffer, CL_TRUE, 0, size, host_ptr);
+    this->command_queue.enqueueWriteBuffer(buffer, CL_TRUE, offset, size, host_ptr);
 }

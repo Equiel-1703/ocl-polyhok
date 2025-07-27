@@ -1,11 +1,11 @@
 #pragma once
 
-#define CL_HPP_TARGET_OPENCL_VERSION 200 // OpenCL 2.0
-#include <CL/cl.hpp>
+#include "../cldef.hpp"
 
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <stdexcept>
 
 class OCLInterface
 {
@@ -37,8 +37,8 @@ public:
     cl::Buffer createBuffer(size_t size, cl_mem_flags flags, void *host_ptr = nullptr);
 
     void executeKernel(cl::Kernel &kernel, const cl::NDRange &global_range, const cl::NDRange &local_range);
-    void readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size);
-    void writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size);
+    void readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, size_t offset = 0);
+    void writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset = 0);
 
     cl::Context getContext() const { return context; }
     cl::Device getSelectedDevice() const { return selected_device; }
