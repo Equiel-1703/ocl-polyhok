@@ -175,12 +175,12 @@ void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_r
     std::cout << "OpenCL kernel executed successfully." << std::endl;
 }
 
-void OCLInterface::readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, size_t offset)
+void OCLInterface::readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, size_t offset) const
 {
     this->command_queue.enqueueReadBuffer(buffer, CL_TRUE, offset, size, host_ptr);
 }
 
-void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset)
+void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset) const
 {
     this->command_queue.enqueueWriteBuffer(buffer, CL_TRUE, offset, size, host_ptr);
 }

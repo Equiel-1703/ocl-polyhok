@@ -37,8 +37,8 @@ public:
     cl::Buffer createBuffer(size_t size, cl_mem_flags flags, void *host_ptr = nullptr);
 
     void executeKernel(cl::Kernel &kernel, const cl::NDRange &global_range, const cl::NDRange &local_range);
-    void readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, size_t offset = 0);
-    void writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset = 0);
+    void readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, size_t offset = 0) const;
+    void writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset = 0) const;
 
     cl::Context getContext() const { return context; }
     cl::Device getSelectedDevice() const { return selected_device; }
