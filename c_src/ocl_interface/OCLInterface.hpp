@@ -39,6 +39,8 @@ public:
     void executeKernel(cl::Kernel &kernel, const cl::NDRange &global_range, const cl::NDRange &local_range);
     void readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, size_t offset = 0) const;
     void writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset = 0) const;
+    void *mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_flags flags, size_t size, size_t offset = 0) const;
+    void unMapHostPtr(const cl::Buffer &buffer, void *host_ptr) const;
 
     cl::Context getContext() const { return context; }
     cl::Device getSelectedDevice() const { return selected_device; }

@@ -36,7 +36,7 @@ std::string OCLInterface::getKernelCode(const char *file_name)
 
     if (!kernel_file.is_open())
     {
-        std::cerr << "ERROR: Unable to open kernel file '" << file_name << "'." << std::endl;
+        std::cerr << "Unable to open kernel file '" << file_name << "'." << std::endl;
         throw std::runtime_error("Kernel file not found");
     }
 
@@ -130,7 +130,7 @@ cl::Program OCLInterface::createProgram(const char *file_name)
 
     if (program() == nullptr)
     {
-        std::cerr << "ERROR: Failed to create OpenCL program from file '" << file_name << "'." << std::endl;
+        std::cerr << "Failed to create OpenCL program from file '" << file_name << "'." << std::endl;
         std::cerr << "OpenCL error: " << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(this->selected_device) << std::endl;
         throw std::runtime_error("Failed to create OpenCL program");
     }
@@ -145,7 +145,7 @@ cl::Kernel OCLInterface::createKernel(const cl::Program &program, const char *ke
 
     if (kernel() == nullptr)
     {
-        std::cerr << "ERROR: Failed to create OpenCL kernel '" << kernel_name << "'." << std::endl;
+        std::cerr << "Failed to create OpenCL kernel '" << kernel_name << "'." << std::endl;
         throw std::runtime_error("Failed to create OpenCL kernel");
     }
 
@@ -159,7 +159,7 @@ cl::Buffer OCLInterface::createBuffer(size_t size, cl_mem_flags flags, void *hos
 
     if (buffer() == nullptr)
     {
-        std::cerr << "ERROR: Failed to create OpenCL buffer of size " << size << "." << std::endl;
+        std::cerr << "Failed to create OpenCL buffer of size " << size << "." << std::endl;
         throw std::runtime_error("Failed to create OpenCL buffer");
     }
 
@@ -183,4 +183,25 @@ void OCLInterface::readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t s
 void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset) const
 {
     this->command_queue.enqueueWriteBuffer(buffer, CL_TRUE, offset, size, host_ptr);
+}
+
+void *OCLInterface::mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_flags flags, size_t size, size_t offset) const
+{
+    cl_int err;
+
+    void *mapped_ptr = this->command_queue.enqueueMapBuffer(buffer, CL_TRUE, flags, offset, size, nullptr, nullptr, &err);
+
+    if (err != CL_SUCCESS)
+    {
+        std::cerr << "Failed to map OpenCL buffer to pinned memory. Error code: " << err << std::endl;
+        throw std::runtime_error("Failed to map OpenCL buffer to pinned memory");
+    }
+
+    return mapped_ptr;
+}
+
+void OCLInterface::unMapHostPtr(const cl::Buffer &buffer, void *host_ptr) const
+{
+    this->command_queue.enqueueUnmapMemObject(buffer, host_ptr);
+    this->command_queue.finish(); // Ensure the unmap operation is complete
 }
