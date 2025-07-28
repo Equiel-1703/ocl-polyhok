@@ -607,7 +607,7 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int argc, const ERL_
   return result_term;
 }
 
-// Creates a new GPU array with the specified number of rows, columns, and type
+// Creates a new empty GPU array with the specified number of rows, columns, and type
 static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
   int nrow, ncol;
@@ -692,6 +692,9 @@ static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int argc, const ERL_NIF_TE
 /////////////////////////////
 /////////////////////////////
 
+// Creates a new pinned memory buffer in OpenCL and copies the data from the host list provided to it.
+// The first two elements of the matrix are reserved for the number of rows and columns. The type
+// of the elements in the list is assumed to be float, and the list is expected to be a linked list.
 static ERL_NIF_TERM new_pinned_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
   ERL_NIF_TERM host_list, head, tail;
@@ -768,48 +771,50 @@ static ERL_NIF_TERM new_pinned_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM 
   return term;
 }
 
+// Creates a new GPU matrex from a pinned memory buffer.
 static ERL_NIF_TERM new_gmatrex_pinned_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-  float *matrix;
-  float *dev_matrix;
-  cudaError_t error_gpu;
-  float **array_res;
+  cl::Buffer dev_matrex;
+  cl::Buffer *pinned_array;
 
-  if (!enif_get_resource(env, argv[0], PINNED_ARRAY, (void **)&array_res))
+  // Get the pinned array resource
+  if (!enif_get_resource(env, argv[0], PINNED_ARRAY, (void **)&pinned_array))
   {
     return enif_make_badarg(env);
   }
 
-  matrix = (float *)*array_res;
-  uint64_t data_size = sizeof(float) * (MX_LENGTH(matrix) - 2);
+  // Calculate the size of the data to be copied from the pinned memory
+  // We skip the first two elements (rows and columns) in the pinned memory
+  // and only copy the actual data.
+  size_t data_size = sizeof(float) * (MatrexUtils::getLength(*pinned_array, *open_cl) - 2);
 
-  matrix += 2;
-
-  ///// MAKE CUDA CALL
-  cudaMalloc((void **)&dev_matrix, data_size);
-  error_gpu = cudaGetLastError();
-  if (error_gpu != cudaSuccess)
+  try
   {
-    char message[200];
-    strcpy(message, "Error create_ref_nif: ");
-    strcat(message, cudaGetErrorString(error_gpu));
-    enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
+    // Map the pinned memory to a host pointer
+    void *host_matrex = open_cl->mapHostPtrToPinnedMemory(
+        *pinned_array,
+        CL_MAP_READ,            // Map for reading only
+        data_size,
+        2 * sizeof(uint32_t));  // Skip the first two elements (rows and columns)
+
+    // Create device buffer and copy data from pinned memory
+    dev_matrex = open_cl->createBuffer(
+        data_size,
+        CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+        host_matrex);
+
+    // Unmap the host pointer after creating the buffer
+    open_cl->unMapHostPtr(*pinned_array, host_matrex);
   }
-  ///// MAKE CUDA CALL
-  cudaMemcpy(dev_matrix, matrix, data_size, cudaMemcpyHostToDevice);
-  error_gpu = cudaGetLastError();
-  if (error_gpu != cudaSuccess)
+  catch (const std::exception &e)
   {
-    char message[200];
-    strcpy(message, "Error create_ref_nif: ");
-    strcat(message, cudaGetErrorString(error_gpu));
-    enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
+    std::cerr << "[ERROR] Failed to create GPU matrex from pinned memory: " << e.what() << std::endl;
+    enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
 
-  /////////// END CUDA CALL
+  cl::Buffer *gpu_res = (cl::Buffer *)enif_alloc_resource(ARRAY_TYPE, sizeof(cl::Buffer));
+  *gpu_res = dev_matrex;
 
-  float **gpu_res = (float **)enif_alloc_resource(ARRAY_TYPE, sizeof(float *));
-  *gpu_res = dev_matrix;
   ERL_NIF_TERM term = enif_make_resource(env, gpu_res);
   // ...and release the resource so that it will be freed when Erlang garbage collects
   enif_release_resource(gpu_res);
@@ -1541,13 +1546,13 @@ static ERL_NIF_TERM spawn_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[
 
 static ErlNifFunc nif_funcs[] = {
     {"jit_compile_and_launch_nif", 7, jit_compile_and_launch_nif},
-    {"new_gpu_array_nif", 3, new_gpu_array_nif},                    // OK
-    {"get_gpu_array_nif", 4, get_gpu_array_nif},                    // OK
-    {"create_gpu_array_nx_nif", 4, create_gpu_array_nx_nif},        // OK
-    {"load_kernel_nif", 2, load_kernel_nif},                        // OK (no need to traslate)
-    {"load_fun_nif", 2, load_fun_nif},                              // OK (no need to translate)
-    {"new_pinned_nif", 2, new_pinned_nif},                          // OK 
-    {"new_gmatrex_pinned_nif", 1, new_gmatrex_pinned_nif},
+    {"new_gpu_array_nif", 3, new_gpu_array_nif},             // OK
+    {"get_gpu_array_nif", 4, get_gpu_array_nif},             // OK
+    {"create_gpu_array_nx_nif", 4, create_gpu_array_nx_nif}, // OK
+    {"load_kernel_nif", 2, load_kernel_nif},                 // OK (no need to traslate)
+    {"load_fun_nif", 2, load_fun_nif},                       // OK (no need to translate)
+    {"new_pinned_nif", 2, new_pinned_nif},                   // OK
+    {"new_gmatrex_pinned_nif", 1, new_gmatrex_pinned_nif},   // OK
     {"spawn_nif", 4, spawn_nif},
     {"create_nx_ref_nif", 4, create_nx_ref_nif},
     {"get_nx_nif", 4, get_nx_nif},
