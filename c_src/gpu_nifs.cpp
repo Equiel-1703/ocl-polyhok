@@ -1522,25 +1522,27 @@ static ERL_NIF_TERM load_fun_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM ar
   return term;
 }
 
+// Invokes a kernel function that was loaded with load_kernel_nif/2.
 static ERL_NIF_TERM spawn_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
+  // Double pointer to the kernel function resource
   void (**kernel_res)(ErlNifEnv *env, const ERL_NIF_TERM argv[], ErlNifResourceType *type, ErlNifResourceType *ftype);
-  // void (**kernel_res)();
-  // float **array_res;
-  // printf("spawn begin\n");
-  // fflush(stdout);
+
+  // Get the kernel resource from the first argument
   if (!enif_get_resource(env, argv[0], KERNEL_TYPE, (void **)&kernel_res))
   {
     return enif_make_badarg(env);
   }
 
+  // This is done to get rid of the double pointer
+  // and to call the function directly.
   void (*fn)(ErlNifEnv *env, const ERL_NIF_TERM argv[], ErlNifResourceType *type, ErlNifResourceType *ftype) = *kernel_res;
-  // void (*fn)() = *kernel_res;
-  // float *array = *array_res;
-  // printf("ok nif");
-  (*fn)(env, argv, ARRAY_TYPE, KERNEL_TYPE);
-  //(*fn)();
 
+  // Calling the kernel invocation function with the environment and arguments
+  (*fn)(env, argv, ARRAY_TYPE, KERNEL_TYPE);
+
+  // If the function returns, it means the kernel was successfully invoked
+  // and we can return an integer indicating success.
   return enif_make_int(env, 0);
 }
 
@@ -1553,7 +1555,7 @@ static ErlNifFunc nif_funcs[] = {
     {"load_fun_nif", 2, load_fun_nif},                       // OK (no need to translate)
     {"new_pinned_nif", 2, new_pinned_nif},                   // OK
     {"new_gmatrex_pinned_nif", 1, new_gmatrex_pinned_nif},   // OK
-    {"spawn_nif", 4, spawn_nif},
+    {"spawn_nif", 4, spawn_nif},                             // OK
     {"create_nx_ref_nif", 4, create_nx_ref_nif},
     {"get_nx_nif", 4, get_nx_nif},
     {"new_gpu_nx_nif", 3, new_gpu_nx_nif},
