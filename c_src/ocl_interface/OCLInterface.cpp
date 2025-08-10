@@ -205,3 +205,8 @@ void OCLInterface::unMapHostPtr(const cl::Buffer &buffer, void *host_ptr) const
     this->command_queue.enqueueUnmapMemObject(buffer, host_ptr);
     this->command_queue.finish(); // Ensure the unmap operation is complete
 }
+
+void OCLInterface::synchronize() const
+{
+    this->command_queue.finish(); // Wait for all commands up to this point to complete in the command queue
+}

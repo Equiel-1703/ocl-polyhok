@@ -42,6 +42,8 @@ public:
     void *mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_flags flags, size_t size, size_t offset = 0) const;
     void unMapHostPtr(const cl::Buffer &buffer, void *host_ptr) const;
 
+    void synchronize() const;
+
     cl::Context getContext() const { return context; }
     cl::Device getSelectedDevice() const { return selected_device; }
     cl::Platform getSelectedPlatform() const { return selected_platform; }
