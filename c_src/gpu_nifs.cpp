@@ -1,5 +1,4 @@
 #include "ocl_interface/OCLInterface.hpp"
-#include "matrex_utils/MatrexUtils.hpp"
 
 #include <erl_nif.h>
 
@@ -12,13 +11,13 @@
 #include <dlfcn.h>
 #include <assert.h>
 
-void dev_array_destructor(ErlNifEnv *env, void *res)
+void dev_array_destructor(ErlNifEnv * /* env */, void *res)
 {
   cl::Buffer *dev_array = (cl::Buffer *)res;
   delete dev_array; // cl::Buffer destructor will properly release OpenCL resources
 }
 
-void dev_pinned_array_destructor(ErlNifEnv *env, void *res)
+void dev_pinned_array_destructor(ErlNifEnv * /* env */, void *res)
 {
   cl::Buffer *dev_array = (cl::Buffer *)res;
   delete dev_array; // cl::Buffer destructor will properly release OpenCL resources
@@ -55,7 +54,7 @@ void init_ocl(ErlNifEnv *env)
 }
 
 static int
-load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
+load(ErlNifEnv *env, void ** /* priv_data */, ERL_NIF_TERM /* load_info */)
 {
   KERNEL_TYPE =
       enif_open_resource_type(env, NULL, "kernel", NULL, ERL_NIF_RT_CREATE, NULL);
@@ -73,7 +72,7 @@ load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
 }
 
 static void
-unload(ErlNifEnv *env, void *priv_data)
+unload(ErlNifEnv * /* env */, void * /* priv_data */)
 {
   if (open_cl != nullptr)
   {
@@ -85,6 +84,9 @@ unload(ErlNifEnv *env, void *priv_data)
 }
 
 // The next 3 functions are used to compile and launch the CUDA kernels using NVRTC (NVIDIA Runtime Compilation).
+
+// Temporary commenting out the NVRTC related code for testing
+/*
 
 void fail_nvrtc(ErlNifEnv *env, nvrtcResult result, const char *obs)
 {
@@ -417,8 +419,10 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
   return enif_make_int(env, 0);
 }
 
+*/
+
 // This function retrieves the OpenCL array from the device and returns it to the host as an Erlang term.
-static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
 {
   int nrow, ncol;
   size_t data_size;
@@ -498,7 +502,7 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int argc, const ERL_NIF_TE
 
 // This function creates a new GPU array with the specified number of rows, columns, and type.
 // It allocates memory on the GPU and copies the data from the host array passed to the device.
-static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
 {
   int nrow, ncol;
   size_t data_size;
@@ -576,7 +580,7 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int argc, const ERL_
 }
 
 // Creates a new empty GPU array with the specified number of rows, columns, and type
-static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
 {
   int nrow, ncol;
   size_t data_size;
@@ -652,18 +656,18 @@ static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int argc, const ERL_NIF_TE
 }
 
 // This function synchronizes the OpenCL command queue, ensuring that all previously enqueued commands have completed.
-static ERL_NIF_TERM synchronize_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM synchronize_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM /* argv */[])
 {
   open_cl->synchronize();
-  
+
   return enif_make_int(env, 0);
 }
 
 static ErlNifFunc nif_funcs[] = {
-    {"jit_compile_and_launch_nif", 7, jit_compile_and_launch_nif},
-    {"new_gpu_array_nif", 3, new_gpu_array_nif},                    // OK (used in latest PolyHok implementation)
-    {"get_gpu_array_nif", 4, get_gpu_array_nif},                    // OK (used in latest PolyHok implementation)
-    {"create_gpu_array_nx_nif", 4, create_gpu_array_nx_nif},        // OK (used in latest PolyHok implementation)
-    {"synchronize_nif", 0, synchronize_nif}};                       // OK (used in latest PolyHok implementation)
+    // { .name = "jit_compile_and_launch_nif", .arity = 7, .fptr = jit_compile_and_launch_nif, .flags = 0 },
+    {.name = "new_gpu_array_nif", .arity = 3, .fptr = new_gpu_array_nif, .flags = 0},
+    {.name = "get_gpu_array_nif", .arity = 4, .fptr = get_gpu_array_nif, .flags = 0},
+    {.name = "create_gpu_array_nx_nif", .arity = 4, .fptr = create_gpu_array_nx_nif, .flags = 0},
+    {.name = "synchronize_nif", .arity = 0, .fptr = synchronize_nif, .flags = 0}};
 
 ERL_NIF_INIT(Elixir.OCLPolyHok, nif_funcs, &load, NULL, NULL, &unload)
