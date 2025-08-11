@@ -1,3 +1,14 @@
+require OCLPolyHok
+
 IO.puts "Running CPPBackendTest"
 
-buf = OCLPolyHok.new_gnx({1,2}, {:s, 32})
+# Creating NX array
+nx_tensor = Nx.tensor([1, 2, 3], type: :s32)
+
+buf = OCLPolyHok.new_gnx(nx_tensor)
+
+# Retrieving data from GPU to host
+result = OCLPolyHok.get_gnx(buf)
+
+# Verifying the result
+IO.inspect(result, label: "Result from GPU")

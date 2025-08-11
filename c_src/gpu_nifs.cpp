@@ -4,8 +4,6 @@
 
 #include <iostream>
 
-#include <stdio.h> // Refactor code to use iostream and remove this later
-
 #include <cmath>
 #include <cstdint>
 #include <dlfcn.h>
@@ -413,7 +411,7 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
 
 */
 
-// This function retrieves the OpenCL array from the device and returns it to the host as an Erlang term.
+// This function retrieves the OpenCL array from the device (GPU) and returns it to the host as an Erlang term.
 static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
 {
   int nrow, ncol;
@@ -472,7 +470,7 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
     char message[200];
     strcpy(message, "[ERROR] (get_gpu_array_nif) copying data from device to host: unknown type ");
     strcat(message, type_name);
-    enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
+    return enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
   }
 
   // Allocate memory in host for the result
@@ -482,11 +480,13 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   try
   {
     open_cl->readBuffer(dev_array, host_result_data, data_size);
+
+    std::cout << "[INFO] Data copied from device to host successfully." << std::endl;
   }
   catch (const std::exception &e)
   {
     std::cerr << "[ERROR] (get_gpu_array_nif) copying data from device to host: " << e.what() << std::endl;
-    enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
+    return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
 
   return result;
@@ -545,7 +545,7 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int /* argc */, cons
     char message[200];
     strcpy(message, "[ERROR] (create_gpu_array_nx_nif): unknown type ");
     strcat(message, type_name);
-    enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
+    return enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
   }
 
   try
@@ -565,12 +565,15 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int /* argc */, cons
     // Release the C++ handle to the resource, letting the BEAM manage its lifetime
     enif_release_resource(gpu_res);
 
+    std::cout << "[INFO] New GPU array created with " << nrow << " rows, " << ncol << " columns, and type " << type_name << std::endl;
+    std::cout << "[INFO] Data copied from host to device successfully." << std::endl;
+
     return return_term;
   }
   catch (const std::exception &e)
   {
     std::cerr << "[ERROR] (create_gpu_array_nx_nif) creating GPU buffer: " << e.what() << std::endl;
-    enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
+    return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
 }
 
@@ -659,6 +662,8 @@ static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
 static ERL_NIF_TERM synchronize_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM /* argv */[])
 {
   open_cl->synchronize();
+
+  std::cout << "[INFO] OpenCL command queue synchronized successfully." << std::endl;
 
   return enif_make_int(env, 0);
 }
