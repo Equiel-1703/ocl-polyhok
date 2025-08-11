@@ -499,8 +499,6 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int /* argc */, cons
   int nrow, ncol;
   size_t data_size;
   ErlNifBinary host_array_el;
-  cl::Buffer dev_array;
-  ERL_NIF_TERM result_term;
 
   // Get the host array binary
   if (!enif_inspect_binary(env, argv[0], &host_array_el))
@@ -550,25 +548,30 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int /* argc */, cons
     enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
   }
 
-  // Allocate memory on the GPU and copy the data from the host array
-  // Note: The host_array_el.data is a pointer to the data in the Erlang binary
   try
   {
-    dev_array = open_cl->createBuffer(data_size, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, (void *)host_array_el.data);
+    // Allocate memory on the GPU and copy the data from the host array
+    // Note: The host_array_el.data is a pointer to the data in the Erlang binary
+    cl::Buffer dev_array = open_cl->createBuffer(data_size, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, (void *)host_array_el.data);
+
+    // Allocate an Erlang resource to hold the C++ buffer object
+    cl::Buffer *gpu_res = (cl::Buffer *)enif_alloc_resource(ARRAY_TYPE, sizeof(cl::Buffer));
+
+    // Using placement new to construct the cl::Buffer in the resource's memory
+    new (gpu_res) cl::Buffer(dev_array);
+
+    ERL_NIF_TERM return_term = enif_make_resource(env, gpu_res);
+
+    // Release the C++ handle to the resource, letting the BEAM manage its lifetime
+    enif_release_resource(gpu_res);
+
+    return return_term;
   }
   catch (const std::exception &e)
   {
     std::cerr << "[ERROR] (create_gpu_array_nx_nif) creating GPU buffer: " << e.what() << std::endl;
     enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
-
-  cl::Buffer *gpu_res = (cl::Buffer *)enif_alloc_resource(ARRAY_TYPE, sizeof(cl::Buffer));
-  *gpu_res = dev_array;
-  result_term = enif_make_resource(env, gpu_res);
-  // ...and release the resource so that it will be freed when Erlang garbage collects
-  enif_release_resource(gpu_res);
-
-  return result_term;
 }
 
 // Creates a new empty GPU array with the specified number of rows, columns, and type
