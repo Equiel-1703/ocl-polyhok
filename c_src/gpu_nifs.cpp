@@ -14,20 +14,17 @@
 void dev_array_destructor(ErlNifEnv * /* env */, void *res)
 {
   cl::Buffer *dev_array = (cl::Buffer *)res;
-  delete dev_array; // cl::Buffer destructor will properly release OpenCL resources
-}
 
-void dev_pinned_array_destructor(ErlNifEnv * /* env */, void *res)
-{
-  cl::Buffer *dev_array = (cl::Buffer *)res;
-  delete dev_array; // cl::Buffer destructor will properly release OpenCL resources
+  // Explicitly call the destructor for the cl::Buffer object
+  // without deallocating the resource memory itself. This is
+  // Erlang's garbage collector responsibility.
+  dev_array->~Buffer();
 }
 
 OCLInterface *open_cl = nullptr;
 
 ErlNifResourceType *KERNEL_TYPE;
 ErlNifResourceType *ARRAY_TYPE;
-ErlNifResourceType *PINNED_ARRAY;
 
 void init_ocl(ErlNifEnv *env)
 {
@@ -60,13 +57,11 @@ load(ErlNifEnv *env, void ** /* priv_data */, ERL_NIF_TERM /* load_info */)
       enif_open_resource_type(env, NULL, "kernel", NULL, ERL_NIF_RT_CREATE, NULL);
   ARRAY_TYPE =
       enif_open_resource_type(env, NULL, "gpu_ref", dev_array_destructor, ERL_NIF_RT_CREATE, NULL);
-  PINNED_ARRAY =
-      enif_open_resource_type(env, NULL, "pinned_array", dev_pinned_array_destructor, ERL_NIF_RT_CREATE, NULL);
-
-  std::cout << "GPU NIFs loaded successfully." << std::endl;
 
   // Initialize OpenCL
   init_ocl(env);
+
+  std::cout << "GPU NIFs loaded successfully." << std::endl;
 
   return 0;
 }
@@ -584,8 +579,6 @@ static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
 {
   int nrow, ncol;
   size_t data_size;
-  ERL_NIF_TERM return_term;
-  cl::Buffer dev_array;
 
   // Get number of rows
   if (!enif_get_int(env, argv[0], &nrow))
@@ -632,27 +625,34 @@ static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
     char message[200];
     strcpy(message, "[ERROR] new_gpu_array_nif: unknown type: ");
     strcat(message, type_name);
-    enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
+    return enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
   }
 
-  // Allocate memory on the GPU
   try
   {
-    dev_array = open_cl->createBuffer(data_size, CL_MEM_READ_WRITE);
+    // Allocate memory on the GPU
+    cl::Buffer dev_array = open_cl->createBuffer(data_size, CL_MEM_READ_WRITE);
+
+    // Allocate an Erlang resource to hold the C++ buffer object
+    cl::Buffer *gpu_res = (cl::Buffer *)enif_alloc_resource(ARRAY_TYPE, sizeof(cl::Buffer));
+
+    // Using placement new to construct the cl::Buffer in the resource's memory
+    new (gpu_res) cl::Buffer(dev_array);
+
+    ERL_NIF_TERM return_term = enif_make_resource(env, gpu_res);
+
+    // Release the C++ handle to the resource, letting the BEAM manage its lifetime
+    enif_release_resource(gpu_res);
+
+    std::cout << "[INFO] New GPU array created with " << nrow << " rows, " << ncol << " columns, and type " << type_name << std::endl;
+
+    return return_term;
   }
   catch (const std::exception &e)
   {
     std::cerr << "[ERROR] Failed to create GPU buffer: " << e.what() << std::endl;
-    enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
+    return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
-
-  cl::Buffer *gpu_res = (cl::Buffer *)enif_alloc_resource(ARRAY_TYPE, sizeof(cl::Buffer));
-  *gpu_res = dev_array;
-  return_term = enif_make_resource(env, gpu_res);
-  // ...and release the resource so that it will be freed when Erlang garbage collects
-  enif_release_resource(gpu_res);
-
-  return return_term;
 }
 
 // This function synchronizes the OpenCL command queue, ensuring that all previously enqueued commands have completed.
