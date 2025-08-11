@@ -23,7 +23,6 @@ void dev_array_destructor(ErlNifEnv * /* env */, void *res)
 
 OCLInterface *open_cl = nullptr;
 
-ErlNifResourceType *KERNEL_TYPE;
 ErlNifResourceType *ARRAY_TYPE;
 
 void init_ocl(ErlNifEnv *env)
@@ -53,8 +52,6 @@ void init_ocl(ErlNifEnv *env)
 static int
 load(ErlNifEnv *env, void ** /* priv_data */, ERL_NIF_TERM /* load_info */)
 {
-  KERNEL_TYPE =
-      enif_open_resource_type(env, NULL, "kernel", NULL, ERL_NIF_RT_CREATE, NULL);
   ARRAY_TYPE =
       enif_open_resource_type(env, NULL, "gpu_ref", dev_array_destructor, ERL_NIF_RT_CREATE, NULL);
 
