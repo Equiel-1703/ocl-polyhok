@@ -9,4 +9,4 @@
 #define CL_TARGET_OPENCL_VERSION OPENCL_VERSION
 #define CL_HPP_TARGET_OPENCL_VERSION OPENCL_VERSION
 
-#include <CL/cl.hpp>
+#include <CL/opencl.hpp>
