@@ -259,8 +259,8 @@ defmodule OCLPolyHok.OpenCLBackend do
       para
       |> Enum.map(fn {p, _, _} -> p end)
 
-    cuda_body = OCLPolyHok.OpenCLBackend.gen_ocl(body, inf_types, param_vars, module)
-    k = OCLPolyHok.OpenCLBackend.gen_kernel(fname, param_list, cuda_body)
+    opencl_body = OCLPolyHok.OpenCLBackend.gen_ocl(body, inf_types, param_vars, module)
+    k = OCLPolyHok.OpenCLBackend.gen_kernel(fname, param_list, opencl_body)
 
     accessfunc =
       OCLPolyHok.OpenCLBackend.gen_kernel_call(fname, length(para), Enum.reverse(types_para))
@@ -363,8 +363,8 @@ defmodule OCLPolyHok.OpenCLBackend do
       para
       |> Enum.map(fn {p, _, _} -> p end)
 
-    cuda_body = OCLPolyHok.OpenCLBackend.gen_ocl(body, inf_types, param_vars, module)
-    k = OCLPolyHok.OpenCLBackend.gen_function(fname, param_list, cuda_body, fun_type)
+    opencl_body = OCLPolyHok.OpenCLBackend.gen_ocl(body, inf_types, param_vars, module)
+    k = OCLPolyHok.OpenCLBackend.gen_function(fname, param_list, opencl_body, fun_type)
     ptr = OCLPolyHok.OpenCLBackend.gen_function_ptr(fname)
     get_ptr = OCLPolyHok.OpenCLBackend.gen_get_function_ptr(fname)
 
@@ -433,8 +433,8 @@ defmodule OCLPolyHok.OpenCLBackend do
     # fname = "#{module_name}_#{fname}"
     save_type_info(fname, Map.get(inf_types, :return), types_para)
 
-    cuda_body = OCLPolyHok.OpenCLBackend.gen_ocl(body, inf_types, param_vars, module)
-    k = OCLPolyHok.OpenCLBackend.gen_function(fname, param_list, cuda_body, fun_type)
+    opencl_body = OCLPolyHok.OpenCLBackend.gen_ocl(body, inf_types, param_vars, module)
+    k = OCLPolyHok.OpenCLBackend.gen_function(fname, param_list, opencl_body, fun_type)
     ptr = OCLPolyHok.OpenCLBackend.gen_function_ptr(fname)
     get_ptr = OCLPolyHok.OpenCLBackend.gen_get_function_ptr(fname)
 

@@ -22,10 +22,10 @@ defmodule JIT do
 
     fun_type = Map.get(inf_types, :return)
 
-    cuda_body =
+    opencl_body =
       OCLPolyHok.OpenCLBackend.gen_ocl_jit(body, inf_types, param_vars, "module", MapSet.new())
 
-    k = OCLPolyHok.OpenCLBackend.gen_function(fname, param_list, cuda_body, fun_type)
+    k = OCLPolyHok.OpenCLBackend.gen_function(fname, param_list, opencl_body, fun_type)
 
     function = "\n" <> k <> "\n\n"
 
@@ -70,10 +70,10 @@ defmodule JIT do
             fun_type
           end
 
-        cuda_body =
+        opencl_body =
           OCLPolyHok.OpenCLBackend.gen_ocl_jit(body, inf_types, param_vars, "module", MapSet.new())
 
-        k = OCLPolyHok.OpenCLBackend.gen_function(fname, param_list, cuda_body, fun_type)
+        k = OCLPolyHok.OpenCLBackend.gen_function(fname, param_list, opencl_body, fun_type)
 
         function = "\n" <> k <> "\n\n"
 
@@ -138,8 +138,8 @@ defmodule JIT do
     #                            _ -> true
     #                  end end)
 
-    cuda_body = OCLPolyHok.OpenCLBackend.gen_ocl_jit(body, inf_types, param_vars, "module", subs)
-    k = OCLPolyHok.OpenCLBackend.gen_kernel_jit(fname, param_list, cuda_body)
+    opencl_body = OCLPolyHok.OpenCLBackend.gen_ocl_jit(body, inf_types, param_vars, "module", subs)
+    k = OCLPolyHok.OpenCLBackend.gen_kernel_jit(fname, param_list, opencl_body)
 
     # accessfunc = OCLPolyHok.OpenCLBackend.gen_kernel_call(fname,length(types_para),Enum.reverse(types_para))
     # IO.puts accessfunc
@@ -723,8 +723,8 @@ defmodule JIT do
     fname = "ker_" <> OCLPolyHok.OpenCLBackend.gen_lambda_name()
     # fname = "k072b2a4iad"
     # fname = OCLPolyHok.OpenCLBackend.gen_lambda_name()
-    cuda_body = OCLPolyHok.OpenCLBackend.gen_ocl(body, inf_types, is_typed, "")
-    k = OCLPolyHok.OpenCLBackend.gen_kernel(fname, param_list, cuda_body)
+    opencl_body = OCLPolyHok.OpenCLBackend.gen_ocl(body, inf_types, is_typed, "")
+    k = OCLPolyHok.OpenCLBackend.gen_kernel(fname, param_list, opencl_body)
 
     accessfunc =
       OCLPolyHok.OpenCLBackend.gen_kernel_call(fname, length(para), Enum.reverse(types_para))
