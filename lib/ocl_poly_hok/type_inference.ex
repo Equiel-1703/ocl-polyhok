@@ -1,7 +1,7 @@
 defmodule OCLPolyHok.TypeInference do
   def type_check(map,body) do
 
-    #body = OCLPolyHok.CudaBackend.add_return(body)
+    #body = OCLPolyHok.OpenCLBackend.add_return(body)
 
     types = infer_types(map,body)
     notinfer = not_infered(Map.to_list(types))

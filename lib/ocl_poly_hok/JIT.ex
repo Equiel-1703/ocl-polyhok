@@ -1,4 +1,4 @@
-require OCLPolyHok.CudaBackend
+require OCLPolyHok.OpenCLBackend
 
 defmodule JIT do
   def compile_function({:anon, fname, code, type}) do
@@ -13,7 +13,7 @@ defmodule JIT do
 
     param_list =
       para
-      |> Enum.map(fn {p, _, _} -> OCLPolyHok.CudaBackend.gen_para(p, Map.get(inf_types, p)) end)
+      |> Enum.map(fn {p, _, _} -> OCLPolyHok.OpenCLBackend.gen_para(p, Map.get(inf_types, p)) end)
       |> Enum.join(", ")
 
     param_vars =
@@ -23,9 +23,9 @@ defmodule JIT do
     fun_type = Map.get(inf_types, :return)
 
     cuda_body =
-      OCLPolyHok.CudaBackend.gen_cuda_jit(body, inf_types, param_vars, "module", MapSet.new())
+      OCLPolyHok.OpenCLBackend.gen_ocl_jit(body, inf_types, param_vars, "module", MapSet.new())
 
-    k = OCLPolyHok.CudaBackend.gen_function(fname, param_list, cuda_body, fun_type)
+    k = OCLPolyHok.OpenCLBackend.gen_function(fname, param_list, cuda_body, fun_type)
 
     function = "\n" <> k <> "\n\n"
 
@@ -53,7 +53,7 @@ defmodule JIT do
         param_list =
           para
           |> Enum.map(fn {p, _, _} ->
-            OCLPolyHok.CudaBackend.gen_para(p, Map.get(inf_types, p))
+            OCLPolyHok.OpenCLBackend.gen_para(p, Map.get(inf_types, p))
           end)
           |> Enum.join(", ")
 
@@ -71,9 +71,9 @@ defmodule JIT do
           end
 
         cuda_body =
-          OCLPolyHok.CudaBackend.gen_cuda_jit(body, inf_types, param_vars, "module", MapSet.new())
+          OCLPolyHok.OpenCLBackend.gen_ocl_jit(body, inf_types, param_vars, "module", MapSet.new())
 
-        k = OCLPolyHok.CudaBackend.gen_function(fname, param_list, cuda_body, fun_type)
+        k = OCLPolyHok.OpenCLBackend.gen_function(fname, param_list, cuda_body, fun_type)
 
         function = "\n" <> k <> "\n\n"
 
@@ -97,7 +97,7 @@ defmodule JIT do
 
     # param_list =
     #   para
-    #   |> Enum.map(fn {p, _, _} -> OCLPolyHok.CudaBackend.gen_para(p, Map.get(inf_types, p)) end)
+    #   |> Enum.map(fn {p, _, _} -> OCLPolyHok.OpenCLBackend.gen_para(p, Map.get(inf_types, p)) end)
     #   |> Enum.filter(fn p -> p != nil end)
     #   |> Enum.join(", ")
 
@@ -112,7 +112,7 @@ defmodule JIT do
     # scalar values as they are (passed by value).
     param_list =
       para
-      |> Enum.map(fn {p, _, _} -> OCLPolyHok.CudaBackend.gen_para(p, Map.get(inf_types, p)) end)
+      |> Enum.map(fn {p, _, _} -> OCLPolyHok.OpenCLBackend.gen_para(p, Map.get(inf_types, p)) end)
       |> Enum.filter(fn p -> p != nil end)
       |> Enum.map(fn x ->
         case String.contains?(x, "*") do
@@ -138,10 +138,10 @@ defmodule JIT do
     #                            _ -> true
     #                  end end)
 
-    cuda_body = OCLPolyHok.CudaBackend.gen_cuda_jit(body, inf_types, param_vars, "module", subs)
-    k = OCLPolyHok.CudaBackend.gen_kernel_jit(fname, param_list, cuda_body)
+    cuda_body = OCLPolyHok.OpenCLBackend.gen_ocl_jit(body, inf_types, param_vars, "module", subs)
+    k = OCLPolyHok.OpenCLBackend.gen_kernel_jit(fname, param_list, cuda_body)
 
-    # accessfunc = OCLPolyHok.CudaBackend.gen_kernel_call(fname,length(types_para),Enum.reverse(types_para))
+    # accessfunc = OCLPolyHok.OpenCLBackend.gen_kernel_call(fname,length(types_para),Enum.reverse(types_para))
     # IO.puts accessfunc
     # <> accessfunc
     "\n" <> k <> "\n\n"
@@ -713,21 +713,21 @@ defmodule JIT do
 
     param_list =
       para
-      |> Enum.map(fn {p, _, _} -> OCLPolyHok.CudaBackend.gen_para(p, Map.get(inf_types, p)) end)
+      |> Enum.map(fn {p, _, _} -> OCLPolyHok.OpenCLBackend.gen_para(p, Map.get(inf_types, p)) end)
       |> Enum.join(", ")
 
     types_para =
       para
       |> Enum.map(fn {p, _, _} -> Map.get(inf_types, p) end)
 
-    fname = "ker_" <> OCLPolyHok.CudaBackend.gen_lambda_name()
+    fname = "ker_" <> OCLPolyHok.OpenCLBackend.gen_lambda_name()
     # fname = "k072b2a4iad"
-    # fname = OCLPolyHok.CudaBackend.gen_lambda_name()
-    cuda_body = OCLPolyHok.CudaBackend.gen_cuda(body, inf_types, is_typed, "")
-    k = OCLPolyHok.CudaBackend.gen_kernel(fname, param_list, cuda_body)
+    # fname = OCLPolyHok.OpenCLBackend.gen_lambda_name()
+    cuda_body = OCLPolyHok.OpenCLBackend.gen_ocl(body, inf_types, is_typed, "")
+    k = OCLPolyHok.OpenCLBackend.gen_kernel(fname, param_list, cuda_body)
 
     accessfunc =
-      OCLPolyHok.CudaBackend.gen_kernel_call(fname, length(para), Enum.reverse(types_para))
+      OCLPolyHok.OpenCLBackend.gen_kernel_call(fname, length(para), Enum.reverse(types_para))
 
     code = "\n" <> k <> "\n\n" <> accessfunc
 

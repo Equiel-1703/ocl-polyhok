@@ -1,4 +1,4 @@
-defmodule OCLPolyHok.CudaBackend do
+defmodule OCLPolyHok.OpenCLBackend do
   @doc """
   Generates a new Elixir module AST with a custom `__using__/1` macro and transformed function definitions.
 
@@ -259,11 +259,11 @@ defmodule OCLPolyHok.CudaBackend do
       para
       |> Enum.map(fn {p, _, _} -> p end)
 
-    cuda_body = OCLPolyHok.CudaBackend.gen_cuda(body, inf_types, param_vars, module)
-    k = OCLPolyHok.CudaBackend.gen_kernel(fname, param_list, cuda_body)
+    cuda_body = OCLPolyHok.OpenCLBackend.gen_ocl(body, inf_types, param_vars, module)
+    k = OCLPolyHok.OpenCLBackend.gen_kernel(fname, param_list, cuda_body)
 
     accessfunc =
-      OCLPolyHok.CudaBackend.gen_kernel_call(fname, length(para), Enum.reverse(types_para))
+      OCLPolyHok.OpenCLBackend.gen_kernel_call(fname, length(para), Enum.reverse(types_para))
 
     "\n" <> k <> "\n\n" <> accessfunc
   end
@@ -363,10 +363,10 @@ defmodule OCLPolyHok.CudaBackend do
       para
       |> Enum.map(fn {p, _, _} -> p end)
 
-    cuda_body = OCLPolyHok.CudaBackend.gen_cuda(body, inf_types, param_vars, module)
-    k = OCLPolyHok.CudaBackend.gen_function(fname, param_list, cuda_body, fun_type)
-    ptr = OCLPolyHok.CudaBackend.gen_function_ptr(fname)
-    get_ptr = OCLPolyHok.CudaBackend.gen_get_function_ptr(fname)
+    cuda_body = OCLPolyHok.OpenCLBackend.gen_ocl(body, inf_types, param_vars, module)
+    k = OCLPolyHok.OpenCLBackend.gen_function(fname, param_list, cuda_body, fun_type)
+    ptr = OCLPolyHok.OpenCLBackend.gen_function_ptr(fname)
+    get_ptr = OCLPolyHok.OpenCLBackend.gen_get_function_ptr(fname)
 
     {"\n" <> k <> "\n\n" <> ptr <> "\n\n" <> get_ptr <> "\n\n",
      {Map.get(inf_types, :return), types_para}}
@@ -433,10 +433,10 @@ defmodule OCLPolyHok.CudaBackend do
     # fname = "#{module_name}_#{fname}"
     save_type_info(fname, Map.get(inf_types, :return), types_para)
 
-    cuda_body = OCLPolyHok.CudaBackend.gen_cuda(body, inf_types, param_vars, module)
-    k = OCLPolyHok.CudaBackend.gen_function(fname, param_list, cuda_body, fun_type)
-    ptr = OCLPolyHok.CudaBackend.gen_function_ptr(fname)
-    get_ptr = OCLPolyHok.CudaBackend.gen_get_function_ptr(fname)
+    cuda_body = OCLPolyHok.OpenCLBackend.gen_ocl(body, inf_types, param_vars, module)
+    k = OCLPolyHok.OpenCLBackend.gen_function(fname, param_list, cuda_body, fun_type)
+    ptr = OCLPolyHok.OpenCLBackend.gen_function_ptr(fname)
+    get_ptr = OCLPolyHok.OpenCLBackend.gen_get_function_ptr(fname)
 
     "\n" <> k <> "\n\n" <> ptr <> "\n\n" <> get_ptr <> "\n\n"
   end
@@ -635,14 +635,14 @@ defmodule OCLPolyHok.CudaBackend do
   end
 
   @doc """
-  Generates CUDA code from the given body, types, parameter variables, module and function substitutions (used when replacing high-order function names, e.g., anonymous functions).
+  Generates OpenCL code from the given body, types, parameter variables, module and function substitutions (used when replacing high-order function names, e.g., anonymous functions).
   """
-  def gen_cuda_jit(body, types, param_vars, module, subs) do
+  def gen_ocl_jit(body, types, param_vars, module, subs) do
     # IO.puts "##########################gen cuda"
     # IO.inspect types
     #  IO.puts "############end gen cuda"
     # raise "hell"
-    # IO.puts "gen_cuda"
+    # IO.puts "gen_ocl"
     # IO.inspect param_vars
     pid = spawn_link(fn -> types_server(param_vars, types, module, subs) end)
     Process.register(pid, :types_server)
@@ -652,12 +652,12 @@ defmodule OCLPolyHok.CudaBackend do
     code
   end
 
-  def gen_cuda(body, types, param_vars, module) do
+  def gen_ocl(body, types, param_vars, module) do
     # IO.puts "##########################gen cuda"
     # IO.inspect types
     #  IO.puts "############end gen cuda"
     # raise "hell"
-    # IO.puts "gen_cuda"
+    # IO.puts "gen_ocl"
     # IO.inspect param_vars
     pid = spawn_link(fn -> types_server(param_vars, types, module, Map.new()) end)
     Process.register(pid, :types_server)
@@ -832,17 +832,28 @@ defmodule OCLPolyHok.CudaBackend do
     end
   end
 
+  # Gera uma expressão em C a partir de uma expressão PolyHok.
   defp gen_exp(exp) do
     case exp do
+      # Acesso a um índice de um array
       {{:., _, [Access, :get]}, _, [arg1, arg2]} ->
         name = gen_exp(arg1)
         index = gen_exp(arg2)
         "#{name}[#{index}]"
 
-      {{:., _, [{struct, _, nil}, field]}, _, []} ->
+      # Acesso a um campo de uma estrutura
+      {{:., _, [{struct, _, _}, field]}, _, []} ->
+        case struct do
+          :blockIdx -> IO.puts("[BACKEND] Acessing blockIdx")
+          :threadIdx -> IO.puts("[BACKEND] Acessing threadIdx")
+          _ -> nil
+        end
+
         "#{to_string(struct)}.#{to_string(field)}"
 
+      # Acesso a um campo de uma estrutura com alias (não sei exatamente por que essa cláusula é necessária)
       {{:., _, [{:__aliases__, _, [struct]}, field]}, _, []} ->
+        IO.puts("[BACKEND] Acessing #{struct} with alias")
         "#{to_string(struct)}.#{to_string(field)}"
 
       {op, _, args} when op in [:+, :-, :/, :*, :<=, :<, :>, :>=, :&&, :||, :!, :!=, :==] ->
