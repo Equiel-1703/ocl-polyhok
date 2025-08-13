@@ -1063,6 +1063,8 @@ defmodule OCLPolyHok do
     - `l`: A list of arguments to be passed to the kernel.
   """
   def spawn(k, t, b, l) do
+    IO.puts("Compiling kernel #{inspect(k)}")
+
     # Get kernel name from the kernel function reference.
     kernel_name = JIT.get_kernel_name(k)
 
@@ -1120,9 +1122,18 @@ defmodule OCLPolyHok do
     # 'types_args' is a list of the inferred types of the actual arguments passed to the kernel (excluding functions).
     types_args = JIT.get_types_para(kast, inf_types)
 
-    IO.inspect(prog)
-    IO.inspect(args)
-    IO.inspect(types_args)
+    print_args_formatted = fn args ->
+      Enum.reduce(args, "", fn arg, acc -> acc <> "\n- #{inspect(arg)}" end)
+    end
+
+    print_types_formatted = fn types ->
+      Enum.reduce(types, "", fn type, acc -> acc <> "\n- #{inspect(type)}" end)
+    end
+
+
+    IO.puts("\n--- kernel args \n#{print_args_formatted.(args)}\n\n--- kernel types \n#{print_types_formatted.(types_args)}\n\n")
+
+    IO.puts("Generated kernel code: \n#{prog}\n\n")
 
     # --------- Commented out just for testing purposes ---------
     # jit_compile_and_launch_nif(
