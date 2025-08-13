@@ -841,19 +841,38 @@ defmodule OCLPolyHok.OpenCLBackend do
         index = gen_exp(arg2)
         "#{name}[#{index}]"
 
-      # Acesso a um campo de uma estrutura
-      {{:., _, [{struct, _, _}, field]}, _, []} ->
-        case struct do
-          :blockIdx -> IO.puts("[BACKEND] Acessing blockIdx")
-          :threadIdx -> IO.puts("[BACKEND] Acessing threadIdx")
-          _ -> nil
+      # Acesso a um campo de indexamento de estrutura de execução
+      {{:., _, [{struct, _, _}, field]}, _, []} when struct in
+      [:threadIdx, :blockIdx, :blockDim, :gridDim] ->
+        output_function = case struct do
+          :threadIdx -> "get_local_id"
+          :blockIdx -> "get_group_id"
+          :blockDim -> "get_local_size"
+          :gridDim -> "get_num_groups"
         end
 
+        output_dim_arg = case field do
+          :x -> "0"
+          :y -> "1"
+          :z -> "2"
+          _ -> raise "Unknown field #{field} in special struct #{struct}"
+        end
+
+        output = "#{output_function}(#{output_dim_arg})"
+
+        # Mensagem para debug
+        IO.puts("[BACKEND] GPU index access: #{struct}.#{field} -> #{output}")
+
+        output
+
+      # Acesso a um campo de uma estrutura normal
+      {{:., _, [{struct, _, _}, field]}, _, []} ->
+        IO.puts("[BACKEND] Acessing #{struct} with field #{field}")
         "#{to_string(struct)}.#{to_string(field)}"
 
       # Acesso a um campo de uma estrutura com alias (não sei exatamente por que essa cláusula é necessária)
       {{:., _, [{:__aliases__, _, [struct]}, field]}, _, []} ->
-        IO.puts("[BACKEND] Acessing #{struct} with alias")
+        IO.puts("[BACKEND] Acessing #{struct} with alias and field #{field}")
         "#{to_string(struct)}.#{to_string(field)}"
 
       {op, _, args} when op in [:+, :-, :/, :*, :<=, :<, :>, :>=, :&&, :||, :!, :!=, :==] ->
