@@ -17,6 +17,8 @@ void dev_array_destructor(ErlNifEnv * /* env */, void *res)
   // without deallocating the resource memory itself. This is
   // Erlang's garbage collector responsibility.
   dev_array->~Buffer();
+
+  std::cout << "[INFO] Device array resource destroyed." << std::endl;
 }
 
 OCLInterface *open_cl = nullptr;
