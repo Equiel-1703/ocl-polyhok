@@ -517,7 +517,7 @@ defmodule OCLPolyHok.OpenCLBackend do
   end
 
   def gen_get_function_ptr(fname) do
-    "extern \"C\" void* get_#{fname}_ptr()\n" <>
+    "void* get_#{fname}_ptr()\n" <>
       "{\n" <>
       "\tvoid* host_function_ptr;\n" <>
       "\tcudaMemcpyFromSymbol(&host_function_ptr, #{fname}_ptr, sizeof(void*));\n" <>
@@ -530,7 +530,7 @@ defmodule OCLPolyHok.OpenCLBackend do
   end
 
   def gen_kernel_jit(name, para, body) do
-    "extern \"C\" __kernel void #{name}(#{para})\n{\n#{body}\n}"
+    "__kernel void #{name}(#{para})\n{\n#{body}\n}"
     # "__global__\nvoid #{name}(#{para})\n{\n#{body}\n}"
   end
 
