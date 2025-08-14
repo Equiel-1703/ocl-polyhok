@@ -18,8 +18,9 @@ private:
 
     void createContext();
     void createCommandQueue();
-    
+
     std::string getKernelCode(const char *file_name);
+
 public:
     OCLInterface();
     ~OCLInterface();
@@ -32,11 +33,14 @@ public:
     void selectDevice(cl::Device d);
     void selectDefaultDevice(cl_device_type device_type = CL_DEVICE_TYPE_ALL);
 
-    cl::Program createProgram(const char *file_name);
+    cl::Program createProgram(std::string &program_code);
+    cl::Program createProgram(const char *program_code);
+    cl::Program createProgramFromFile(const char *file_name);
     cl::Kernel createKernel(const cl::Program &program, const char *kernel_name);
     cl::Buffer createBuffer(size_t size, cl_mem_flags flags, void *host_ptr = nullptr);
 
     void executeKernel(cl::Kernel &kernel, const cl::NDRange &global_range, const cl::NDRange &local_range);
+
     void readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, size_t offset = 0) const;
     void writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset = 0) const;
     void *mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_flags flags, size_t size, size_t offset = 0) const;

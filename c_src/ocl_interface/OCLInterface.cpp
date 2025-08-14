@@ -123,29 +123,46 @@ void OCLInterface::selectDefaultDevice(cl_device_type device_type)
     this->selectDevice(devices[0]);
 }
 
-cl::Program OCLInterface::createProgram(const char *file_name)
+cl::Program OCLInterface::createProgram(std::string &program_code)
 {
-    std::string kernel_code = this->getKernelCode(file_name);
-    cl::Program program(this->context, kernel_code, true);
+    cl::Program program(this->context, program_code);
 
-    if (program() == nullptr)
+    try
     {
-        std::cerr << "Failed to create OpenCL program from file '" << file_name << "'." << std::endl;
-        std::cerr << "OpenCL error: " << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(this->selected_device) << std::endl;
-        throw std::runtime_error("Failed to create OpenCL program");
+        program.build(this->selected_device);
+    }
+    catch (const cl::BuildError &err)
+    {
+        std::cerr << "Build Error!" << std::endl;
+        std::cerr << "Device: " << err.getBuildLog().front().first.getInfo<CL_DEVICE_NAME>() << std::endl;
+        std::cerr << "Log: " << err.getBuildLog().front().second << std::endl;
+        throw std::runtime_error("Failed to build OpenCL program");
     }
 
-    std::cout << "OpenCL program created and builded successfully from file '" << file_name << "'." << std::endl;
+    std::cout << "OpenCL program created and builded successfully." << std::endl;
     return program;
+}
+
+cl::Program OCLInterface::createProgram(const char *program_code)
+{
+    std::string code_str(program_code);
+    return this->createProgram(code_str);
+}
+
+cl::Program OCLInterface::createProgramFromFile(const char *file_name)
+{
+    std::string code_str = this->getKernelCode(file_name);
+    return this->createProgram(code_str);
 }
 
 cl::Kernel OCLInterface::createKernel(const cl::Program &program, const char *kernel_name)
 {
-    cl::Kernel kernel(program, kernel_name);
+    cl_int err = CL_SUCCESS;
+    cl::Kernel kernel(program, kernel_name, &err);
 
-    if (kernel() == nullptr)
+    if (err != CL_SUCCESS || kernel() == nullptr)
     {
-        std::cerr << "Failed to create OpenCL kernel '" << kernel_name << "'." << std::endl;
+        std::cerr << "Failed to create OpenCL kernel '" << kernel_name << "'. Error code: " << err << std::endl;
         throw std::runtime_error("Failed to create OpenCL kernel");
     }
 
@@ -169,8 +186,18 @@ cl::Buffer OCLInterface::createBuffer(size_t size, cl_mem_flags flags, void *hos
 
 void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_range, const cl::NDRange &local_range)
 {
-    this->command_queue.enqueueNDRangeKernel(kernel, cl::NullRange, global_range, local_range);
-    this->command_queue.finish();
+    try
+    {
+        this->command_queue.enqueueNDRangeKernel(kernel, cl::NullRange, global_range, local_range);
+        this->command_queue.finish();
+    }
+    catch (const cl::Error &err)
+    {
+        std::cerr << "Failed to execute OpenCL kernel." << std::endl;
+        std::cerr << "Error code: " << err.err() << std::endl;
+        std::cerr << "Error message: " << err.what() << std::endl;
+        throw std::runtime_error("Failed to execute OpenCL kernel");
+    }
 
     std::cout << "OpenCL kernel executed successfully." << std::endl;
 }
