@@ -1135,16 +1135,15 @@ defmodule OCLPolyHok do
 
     IO.puts("Generated kernel code: \n#{prog}\n\n")
 
-    # --------- Commented out just for testing purposes ---------
-    # jit_compile_and_launch_nif(
-    #   Kernel.to_charlist(kernel_name),
-    #   Kernel.to_charlist(prog),
-    #   t,
-    #   b,
-    #   length(args),
-    #   types_args,
-    #   args
-    # )
+    jit_compile_and_launch_nif(
+      Kernel.to_charlist(kernel_name),
+      Kernel.to_charlist(prog),
+      t,
+      b,
+      length(args),
+      types_args,
+      args
+    )
   end
 
   ############################################# 3
