@@ -75,118 +75,17 @@ unload(ErlNifEnv * /* env */, void * /* priv_data */)
   std::cout << "GPU NIFs unloaded successfully." << std::endl;
 }
 
-// The next 3 functions are used to compile and launch the CUDA kernels using NVRTC (NVIDIA Runtime Compilation).
-
-// Temporary commenting out the NVRTC related code for testing
-/*
-
-void fail_nvrtc(ErlNifEnv *env, nvrtcResult result, const char *obs)
-{
-
-  char message[1000];
-
-  strcpy(message, "Error  NVRTC ");
-  strcat(message, obs);
-  strcat(message, ": ");
-  strcat(message, nvrtcGetErrorString(result));
-  enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
-}
-
-char *compile_to_ptx(ErlNifEnv *env, char *program_source)
-{
-  nvrtcResult rv;
-
-  // create nvrtc program
-  nvrtcProgram prog;
-  rv = nvrtcCreateProgram(
-      &prog,
-      program_source,
-      nullptr,
-      0,
-      nullptr,
-      nullptr);
-  if (rv != NVRTC_SUCCESS)
-    fail_nvrtc(env, rv, "nvrtcCreateProgram");
-
-  int size_options = 10;
-  const char *options[10] = {
-      "--include-path=/lib/erlang/usr/include/",
-      "--include-path=/usr/include/",
-      "--include-path=/usr/lib/",
-      "--include-path=/usr/include/x86_64-linux-gnu/",
-      "--include-path=/usr/include/c++/11",
-      "--include-path=/usr/include/x86_64-linux-gnu/c++/11",
-      "--include-path=/usr/include/c++/11/backward",
-      "--include-path=/usr/lib/gcc/x86_64-linux-gnu/11/include",
-      "--include-path=/usr/include/i386-linux-gnu/",
-      "--include-path=/usr/local/include"};
-
-  rv = nvrtcCompileProgram(prog, size_options, options);
-  if (rv != NVRTC_SUCCESS)
-  {
-    nvrtcResult erro_g = rv;
-    size_t log_size;
-    rv = nvrtcGetProgramLogSize(prog, &log_size);
-    if (rv != NVRTC_SUCCESS)
-      fail_nvrtc(env, rv, "nvrtcGetProgramLogSize");
-    // auto log = std::make_unique<char[]>(log_size);
-    char log[log_size];
-    rv = nvrtcGetProgramLog(prog, log);
-    if (rv != NVRTC_SUCCESS)
-      fail_nvrtc(env, rv, "nvrtcGetProgramLog");
-    assert(log[log_size - 1] == '\0');
-
-    printf("Compilation error; log: %s\n", log);
-
-    fail_nvrtc(env, erro_g, "nvrtcCompileProgram");
-    // return enif_make_int(env, 0);
-  }
-  // get ptx code
-  size_t ptx_size;
-  rv = nvrtcGetPTXSize(prog, &ptx_size);
-  if (rv != NVRTC_SUCCESS)
-    fail_nvrtc(env, rv, "nvrtcGetPTXSize");
-  char *ptx_source = new char[ptx_size];
-  nvrtcGetPTX(prog, ptx_source);
-
-  if (rv != NVRTC_SUCCESS)
-    fail_nvrtc(env, rv, "nvrtcGetPTX");
-  assert(ptx_source[ptx_size - 1] == '\0');
-
-  nvrtcDestroyProgram(&prog);
-
-  return ptx_source;
-}
-
+// This function compiles the given kernel code and launches it with the specified blocks and threads.
 static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
+  // Check argc
+  if (argc != 7)
+  {
+    std::cerr << "[ERROR] Invalid number of arguments for jit_compile_and_launch_nif." << std::endl;
+    return enif_make_badarg(env);
+  }
 
-  ERL_NIF_TERM list_types;
-  ERL_NIF_TERM head_types;
-  ERL_NIF_TERM tail_types;
-
-  ERL_NIF_TERM list_args;
-  ERL_NIF_TERM head_args;
-  ERL_NIF_TERM tail_args;
-
-  const ERL_NIF_TERM *tuple_blocks;
-  const ERL_NIF_TERM *tuple_threads;
-  int arity;
-
-  CUmodule module;
-  CUfunction function;
-  CUresult err;
-
-  /// START COLLECTING TIME
-
-  // float time;
-  // cudaEvent_t start, stop;
-  //  cudaEventCreate(&start) ;
-  // cudaEventCreate(&stop) ;
-  // cudaEventRecord(start, 0) ;
-
-  /////////// get name kernel
-
+  // Get kernel name
   ERL_NIF_TERM e_name = argv[0];
   unsigned int size_name;
   if (!enif_get_list_length(env, e_name, &size_name))
@@ -195,11 +94,9 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
   }
 
   char kernel_name[size_name + 1];
-
   enif_get_string(env, e_name, kernel_name, size_name + 1, ERL_NIF_LATIN1);
 
-  ///////////// get code
-
+  // Get kernel code to compile
   ERL_NIF_TERM e_code = argv[1];
   unsigned int size_code;
   if (!enif_get_list_length(env, e_code, &size_code))
@@ -208,27 +105,53 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
   }
 
   char code[size_code + 1];
-
   enif_get_string(env, e_code, code, size_code + 1, ERL_NIF_LATIN1);
+
+  // Creating program and kernel objects
+  cl::Program program = open_cl->createProgram(code);
+  cl::Kernel kernel = open_cl->createKernel(program, kernel_name);
+
+  // Getting blocks and threads tuples pointers
+  const ERL_NIF_TERM *tuple_blocks, *tuple_threads;
+  int arity;
 
   if (!enif_get_tuple(env, argv[2], &arity, &tuple_blocks))
   {
-    printf("spawn: blocks argument is not a tuple");
+    std::cerr << "[ERROR] The given blocks argument is not a tuple." << std::endl;
+    return enif_make_badarg(env);
   }
 
   if (!enif_get_tuple(env, argv[3], &arity, &tuple_threads))
   {
-    printf("spawn:threads argument is not a tuple");
+    std::cerr << "[ERROR] The given threads argument is not a tuple." << std::endl;
+    return enif_make_badarg(env);
   }
-  int b1, b2, b3, t1, t2, t3;
 
-  enif_get_int(env, tuple_blocks[0], &b1);
-  enif_get_int(env, tuple_blocks[1], &b2);
-  enif_get_int(env, tuple_blocks[2], &b3);
-  enif_get_int(env, tuple_threads[0], &t1);
-  enif_get_int(env, tuple_threads[1], &t2);
-  enif_get_int(env, tuple_threads[2], &t3);
+  // Extracting the number of blocks and threads from the tuples
+  int blocks_x, blocks_y, blocks_z, threads_x, threads_y, threads_z;
 
+  enif_get_int(env, tuple_blocks[0], &blocks_x);
+  enif_get_int(env, tuple_blocks[1], &blocks_y);
+  enif_get_int(env, tuple_blocks[2], &blocks_z);
+  enif_get_int(env, tuple_threads[0], &threads_x);
+  enif_get_int(env, tuple_threads[1], &threads_y);
+  enif_get_int(env, tuple_threads[2], &threads_z);
+
+  // Creating NDRange objects for blocks and threads
+  // The global range is the total number of threads (work-items) in each dimension
+  // The local range is the size of each block (work-group) in every dimension
+  // So we need to calculate the global range in each dimension
+  cl::NDRange global_range(blocks_x * threads_x,
+                           blocks_y * threads_y,
+                           blocks_z * threads_z);
+  cl::NDRange local_range(threads_x, threads_y, threads_z);
+
+  std::cout << "[INFO] Kernel '" << kernel_name << "' will be executed with a global range of "
+            << global_range[0] << "x" << global_range[1] << "x" << global_range[2]
+            << " and a local range of " << local_range[0] << "x" << local_range[1]
+            << "x" << local_range[2] << "." << std::endl;
+
+  // Getting the number of arguments given to the kernel
   int size_args;
 
   if (!enif_get_int(env, argv[4], &size_args))
@@ -236,182 +159,124 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
     return enif_make_badarg(env);
   }
 
-  CUdeviceptr arrays[size_args];
-  float floats[size_args];
-  int ints[size_args];
-  double doubles[size_args];
-  int arrays_ptr = 0;
-  int floats_ptr = 0;
-  int doubles_ptr = 0;
-  int ints_ptr = 0;
-  // printf("%s\n",code);
-  // printf("Args: %d %d %d %d %d %d\n",b1,b2,b3,t1,t2,t3);
+  // Collecting the arguments and their types
+  ERL_NIF_TERM list_args_types;
+  ERL_NIF_TERM head_args_types;
+  ERL_NIF_TERM tail_args_types;
 
-  char *ptx = compile_to_ptx(env, code);
+  ERL_NIF_TERM list_args;
+  ERL_NIF_TERM head_args;
+  ERL_NIF_TERM tail_args;
 
-  init_cuda(env);
-  // int device =0;
-  // CUcontext  context2 = NULL;
-  // err = cuCtxCreate(&context2, 0, device);
-  err = cuModuleLoadDataEx(&module, ptx, 0, 0, 0);
-  // printf("after module load\n");
-  if (err != CUDA_SUCCESS)
-    fail_cuda(env, err, "cuModuleLoadData jit compile");
-
-  // And here is how you use your compiled PTX
-
-  err = cuModuleGetFunction(&function, module, kernel_name);
-  // printf("after get funcction\n");
-  if (err != CUDA_SUCCESS)
-    fail_cuda(env, err, "cuModuleGetFunction jit compile");
-
-  void *args[size_args];
-
-  list_types = argv[5];
+  list_args_types = argv[5];
   list_args = argv[6];
 
   for (int i = 0; i < size_args; i++)
   {
-    char type_name[1024];
-    unsigned int size_type;
-    if (!enif_get_list_cell(env, list_types, &head_types, &tail_types))
+    ERL_NIF_TERM arg;
+    char arg_type_name[1024];
+    unsigned int arg_type_name_lenght;
+
+    // Get first element of the list of types
+    if (!enif_get_list_cell(env, list_args_types, &head_args_types, &tail_args_types))
     {
-      printf("erro get list cell\n");
-      return enif_make_badarg(env);
-    }
-    if (!enif_get_list_length(env, head_types, &size_type))
-    {
-      printf("erro get list length\n");
+      std::cerr << "[ERROR] Error getting list cell for kernel argument types." << std::endl;
       return enif_make_badarg(env);
     }
 
-    enif_get_string(env, head_types, type_name, size_type + 1, ERL_NIF_LATIN1);
+    // Get length of the type name
+    if (!enif_get_list_length(env, head_args_types, &arg_type_name_lenght))
+    {
+      std::cerr << "[ERROR] Error getting type name length for kernel argument types." << std::endl;
+      return enif_make_badarg(env);
+    }
 
+    // Get the type name as a string
+    enif_get_string(env, head_args_types, arg_type_name, arg_type_name_lenght + 1, ERL_NIF_LATIN1);
+
+    // Get first element of the list of arguments
+    // This is the actual argument that will be passed to the kernel
     if (!enif_get_list_cell(env, list_args, &head_args, &tail_args))
     {
-      printf("erro get list cell\n");
+      std::cerr << "[ERROR] Error getting list cell for kernel argument " << i << "." << std::endl;
       return enif_make_badarg(env);
     }
+    arg = head_args;
 
-    if (strcmp(type_name, "int") == 0)
+    // Now that we have the argument and its type name
+    // We can convert the argument to the appropriate type and set it in the kernel object
+    if (strcmp(arg_type_name, "int") == 0)
     {
       int iarg;
-      if (!enif_get_int(env, head_args, &iarg))
+      if (!enif_get_int(env, arg, &iarg))
       {
-        printf("error getting int arg\n");
+        std::cerr << "[ERROR] Error getting integer argument for kernel." << std::endl;
         return enif_make_badarg(env);
       }
-      ints[ints_ptr] = iarg;
-      args[i] = (void *)&ints[ints_ptr];
-      ints_ptr++;
-    }
-    else if (strcmp(type_name, "float") == 0)
-    {
 
+      kernel.setArg(i, iarg);
+    }
+    else if (strcmp(arg_type_name, "float") == 0)
+    {
       double darg;
-      if (!enif_get_double(env, head_args, &darg))
+      if (!enif_get_double(env, arg, &darg))
       {
-        printf("error getting float arg\n");
+        std::cerr << "[ERROR] Error getting float argument for kernel." << std::endl;
         return enif_make_badarg(env);
       }
 
-      floats[floats_ptr] = (float)darg;
-      args[i] = (void *)&floats[floats_ptr];
-      floats_ptr++;
+      float farg = static_cast<float>(darg);
+      kernel.setArg(i, farg);
     }
-    else if (strcmp(type_name, "double") == 0)
+    else if (strcmp(arg_type_name, "double") == 0)
     {
-
       double darg;
-      if (!enif_get_double(env, head_args, &darg))
+      if (!enif_get_double(env, arg, &darg))
       {
-        printf("error getting double arg\n");
+        std::cerr << "[ERROR] Error getting double argument for kernel." << std::endl;
         return enif_make_badarg(env);
       }
 
-      doubles[doubles_ptr] = darg;
-      args[i] = (void *)&doubles[doubles_ptr];
-      doubles_ptr++;
+      kernel.setArg(i, darg);
     }
-    else if (strcmp(type_name, "tint") == 0)
+    else if (
+        strcmp(arg_type_name, "tint") == 0 ||
+        strcmp(arg_type_name, "tfloat") == 0 ||
+        strcmp(arg_type_name, "tdouble") == 0)
     {
+      cl::Buffer *array_res;
+      if (!enif_get_resource(env, arg, ARRAY_TYPE, (void **)&array_res))
+      {
+        std::cerr << "[ERROR] Error getting buffer (array) resource for kernel." << std::endl;
+        return enif_make_badarg(env);
+      }
 
-      CUdeviceptr *array_res;
-      enif_get_resource(env, head_args, ARRAY_TYPE, (void **)&array_res);
-      arrays[arrays_ptr] = *array_res;
-      args[i] = (void *)&arrays[arrays_ptr];
-      arrays_ptr++;
-    }
-    else if (strcmp(type_name, "tfloat") == 0)
-    {
-      CUdeviceptr *array_res;
-      enif_get_resource(env, head_args, ARRAY_TYPE, (void **)&array_res);
-      arrays[arrays_ptr] = *array_res;
-      args[i] = (void *)&arrays[arrays_ptr];
-      arrays_ptr++;
-    }
-    else if (strcmp(type_name, "tdouble") == 0)
-    {
-
-      CUdeviceptr *array_res;
-      enif_get_resource(env, head_args, ARRAY_TYPE, (void **)&array_res);
-      arrays[arrays_ptr] = *array_res;
-      // printf("pointer %p\n",arrays[arrays_ptr]);
-      args[i] = (void *)&arrays[arrays_ptr];
-      arrays_ptr++;
+      kernel.setArg(i, *array_res);
     }
     else
     {
-      printf("Type %s not suported\n", type_name);
+      std::cerr << "[ERROR] Unknown argument type '" << arg_type_name << "' for kernel." << std::endl;
       return enif_make_badarg(env);
     }
 
-    list_types = tail_types;
+    list_args_types = tail_args_types;
     list_args = tail_args;
   }
 
-  // printf("after arguments and types\n");
-
-  // LAUNCH KERNEL
-
-  /// END COLLECTING TIME
-
-  // cudaEventRecord(stop, 0) ;
-  //  cudaEventSynchronize(stop) ;
-  //  cudaEventElapsedTime(&time, start, stop) ;
-
-  // printf("cuda%s\t%3.1f\n", kernel_name,time);
-
-  init_cuda(env);
-
-  err = cuLaunchKernel(function, b1, b2, b3, // Nx1x1 blocks
-                       t1, t2, t3,           // 1x1x1 threads
-                       0, 0, args, 0);
-  // printf("after kernel launch\n");
-  if (err != CUDA_SUCCESS)
-    fail_cuda(env, err, "cuLaunchKernel jit compile");
-
-  cuCtxSynchronize();
-
-  // int ptr_matrix[1000];
-  // CUdeviceptr *dev_array = (CUdeviceptr*) args[1];
-  // err=  cuMemcpyDtoH(ptr_matrix, dev_array, 3*sizeof(int)) ;
-  // printf("pointer %p\n",*dev_array);
-  //  printf("blah %p\n",args[0]);
-  if (err != CUDA_SUCCESS)
+  // Now we can execute the kernel
+  try
   {
-    char message[200]; // printf("its ok\n");
-    const char *error;
-    cuGetErrorString(err, &error);
-    strcpy(message, "Error at kernel launch: ");
-    strcat(message, error);
-    enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
+    open_cl->executeKernel(kernel, global_range, local_range);
+    std::cout << "[INFO] Kernel '" << kernel_name << "' executed successfully." << std::endl;
+  }
+  catch (const std::exception &e)
+  {
+    std::cerr << "[ERROR] Error executing kernel '" << kernel_name << "': " << e.what() << std::endl;
+    return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
 
   return enif_make_int(env, 0);
 }
-
-*/
 
 // This function retrieves the OpenCL array from the device (GPU) and returns it to the host as an Erlang term.
 static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
@@ -671,7 +536,7 @@ static ERL_NIF_TERM synchronize_nif(ErlNifEnv *env, int /* argc */, const ERL_NI
 }
 
 static ErlNifFunc nif_funcs[] = {
-    // { .name = "jit_compile_and_launch_nif", .arity = 7, .fptr = jit_compile_and_launch_nif, .flags = 0 },
+    {.name = "jit_compile_and_launch_nif", .arity = 7, .fptr = jit_compile_and_launch_nif, .flags = 0},
     {.name = "new_gpu_array_nif", .arity = 3, .fptr = new_gpu_array_nif, .flags = 0},
     {.name = "get_gpu_array_nif", .arity = 4, .fptr = get_gpu_array_nif, .flags = 0},
     {.name = "create_gpu_array_nx_nif", .arity = 4, .fptr = create_gpu_array_nx_nif, .flags = 0},
