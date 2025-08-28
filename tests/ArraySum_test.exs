@@ -11,8 +11,6 @@ OCLPolyHok.defmodule ArraySum do
   end
 
   def sum(input_1, input_2) do
-    IO.puts "ArraySum.sum called"
-
     # Getting shape and type of the input tensors
     shape = OCLPolyHok.get_shape(input_1)
     type = OCLPolyHok.get_type(input_1)
@@ -40,4 +38,4 @@ b = Nx.tensor(Enum.to_list(1..100), type: {:f, 32}) |> OCLPolyHok.new_gnx
 
 result = ArraySum.sum(a, b) |> OCLPolyHok.get_gnx
 
-IO.inspect(result, limit: :infinity, label: "Result of ArraySum.sum: ")
+IO.inspect(result, label: "Result of ArraySum.sum: ")
