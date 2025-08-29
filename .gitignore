@@ -1,6 +1,7 @@
 # Ignore VSCode files
 .vscode/
 .vscode-test/
+.elixir-tools/
 
 # Ignore Erlang specific files
 /.fetch
