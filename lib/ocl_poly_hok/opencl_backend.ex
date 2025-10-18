@@ -530,12 +530,15 @@ defmodule OCLPolyHok.OpenCLBackend do
   end
 
   def gen_kernel_jit(name, para, body) do
-    "__kernel void #{name}(#{para})\n{\n#{body}\n}"
     # "__global__\nvoid #{name}(#{para})\n{\n#{body}\n}"
+    "__kernel void #{name}(#{para})\n{\n#{body}\n}"
   end
 
   def gen_function(name, para, body, type) do
-    "__device__\n#{type} #{name}(#{para})\n{\n#{body}\n}"
+    # "__device__\n#{type} #{name}(#{para})\n{\n#{body}\n}"
+    
+    # OpenCL doesn't need a special qualifier for device functions
+    "#{type} #{name}(#{para})\n{\n#{body}\n}"
   end
 
   ########################## ADDING RETURN statement to the ast WHEN FUNCTION RETURNS AN EXPRESSION
