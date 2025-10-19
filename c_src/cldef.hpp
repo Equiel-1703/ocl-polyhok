@@ -1,5 +1,7 @@
 /*
-    Defines the OpenCL version to use and include the OpenCL headers
+    This header defines the OpenCL version to use, include OpenCL headers and enables C++ exceptions.
+    
+    It is configured to use OpenCL 2.0 features.
 */
 
 #pragma once
