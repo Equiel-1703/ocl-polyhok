@@ -11,7 +11,7 @@ LINKFLAGS = -lOpenCL
 
 all: $(BUILD_DIR) $(TARGET)
 
-$(TARGET):
+$(TARGET): $(SRC) $(DEPENDENCIES) $(C_SRC_DIR)/ocl_interface/OCLInterface.hpp
 	$(CXX) $(CXXFLAGS) $(DEPENDENCIES) $(SRC) -o $@ $(LINKFLAGS)
 
 # bmp: c_src/bmp_nifs.cu 
