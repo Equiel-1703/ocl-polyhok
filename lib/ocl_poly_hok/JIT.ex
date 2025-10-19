@@ -35,7 +35,7 @@ defmodule JIT do
     opencl_body =
       OCLPolyHok.OpenCLBackend.gen_ocl_jit(body, inf_types, param_vars, "module", MapSet.new())
 
-    k = OCLPolyHok.OpenCLBackend.gen_function(fname, param_list, opencl_body, fun_type)
+    k = OCLPolyHok.OpenCLBackend.gen_function_jit(fname, param_list, opencl_body, fun_type)
 
     function = "\n" <> k <> "\n\n"
 
@@ -91,7 +91,7 @@ defmodule JIT do
           )
         
         # This will generate the function declaration in OpenCL code
-        k = OCLPolyHok.OpenCLBackend.gen_function(fname, param_list, opencl_body, fun_type)
+        k = OCLPolyHok.OpenCLBackend.gen_function_jit(fname, param_list, opencl_body, fun_type)
 
         function = "\n" <> k <> "\n\n"
 

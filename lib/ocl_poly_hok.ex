@@ -419,8 +419,9 @@ defmodule OCLPolyHok do
     # Infers the types of the kernel's variables and functions based on the AST and the delta map inferred above.
     inf_types = JIT.infer_types(kast, delta)
 
-    #  Returns a map of formal parameters that are functions (like lambdas or functions references)
-    # and their actual names. This is needed so spawn can compile the functions and pass them to the kernel.
+    #  Returns a map of formal parameters that are functions and their actual names in OpenCL code.
+    # This is needed so JIT.compile_kernel can replace the function parameters with their actual names in 
+    # the generated OpenCL code.
     subs = JIT.get_function_parameters(kast, l)
 
     # Compiles the kernel AST into a string representation of the OpenCL code. The inferred types are used
@@ -428,8 +429,8 @@ defmodule OCLPolyHok do
     # function parameters with their actual names in the generated code.
     kernel = JIT.compile_kernel(kast, inf_types, subs)
 
-    # Similar to `get_function_parameters`, but this function returns a list of tuples where the first element
-    # is the actual name of the function and the second element is its inferred type.
+    # Here we are getting a list of tuples {function_name, type} for all formal parameters that are functions.
+    # This is needed so we can compile correctly the functions that are passed as arguments to the kernel.
     funs = JIT.get_function_parameters_and_their_types(kast, l, inf_types)
 
     # Takes the function graph and the inferred types, and returns a list of tuples where each tuple contains
@@ -440,9 +441,7 @@ defmodule OCLPolyHok do
       |> Enum.map(fn x -> {x, inf_types[x]} end)
       |> Enum.filter(fn {_, i} -> i != nil end)
 
-    # Compiles the functions and other functions that are used within the kernel. The `JIT.compile_function/1`
-    # function takes a tuple where the first element is the function name and the second element is its inferred type.
-    # The result is a list of CUDA-generated functions that can be executed on the GPU.
+    # Compiles all functions (both those passed as arguments and those used within the kernel).
     comp = Enum.map(funs ++ other_funs, &JIT.compile_function/1)
     comp = Enum.reduce(comp, [], fn x, y -> y ++ x end)
 
