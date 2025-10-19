@@ -390,6 +390,7 @@ defmodule OCLPolyHok.OpenCLBackend do
         index = gen_exp(arg2)
         "float #{name}[#{index}];"
 
+      # Work-group shared memory declaration
       {:__shared__, _, [{{:., _, [Access, :get]}, _, [arg1, arg2]}]} ->
         name = gen_exp(arg1)
         index = gen_exp(arg2)
@@ -410,6 +411,10 @@ defmodule OCLPolyHok.OpenCLBackend do
           end
 
         "__local #{atype} #{name}[#{index}];"
+      
+      {:__syncthreads, _, _} ->
+        # OpenCL equivalent of __syncthreads() in CUDA
+        "barrier(CLK_LOCAL_MEM_FENCE);"
 
       {:var, _, [{var, _, [{:=, _, [{type, _, nil}, exp]}]}]} ->
         # IO.puts "aqui"
@@ -450,11 +455,6 @@ defmodule OCLPolyHok.OpenCLBackend do
           "#{nfun}(#{nargs});"
         end
 
-      # if(is_arg(fun)) do
-      #   "#{fun}(#{nargs})\;"
-      # else
-      #  "#{module}_#{fun}(#{nargs})\;"
-      # end
       {str, _, _} ->
         "#{to_string(str)};"
 
@@ -473,7 +473,7 @@ defmodule OCLPolyHok.OpenCLBackend do
         index = gen_exp(arg2)
         "#{name}[#{index}]"
 
-      # Acesso a um campo de indexamento de estrutura de execução
+      # Accessing special GPU indexing structures (like threadIdx.x, blockIdx.y, etc.)
       {{:., _, [{struct, _, _}, field]}, _, []}
       when struct in [:threadIdx, :blockIdx, :blockDim, :gridDim] ->
         output_function =
@@ -492,19 +492,16 @@ defmodule OCLPolyHok.OpenCLBackend do
             _ -> raise "Unknown field #{field} in special struct #{struct}"
           end
 
-        output = "#{output_function}(#{output_dim_arg})"
-
-        # Mensagem para debug
-        IO.puts("[BACKEND] GPU index access: #{struct}.#{field} -> #{output}")
-
-        output
+        "#{output_function}(#{output_dim_arg})"
 
       # Acesso a um campo de uma estrutura normal
+      # Deixei um IO.puts para debug caso algum comportamento estranho aconteça e precisemos investigar
       {{:., _, [{struct, _, _}, field]}, _, []} ->
         IO.puts("[BACKEND] Acessing #{struct} with field #{field}")
         "#{to_string(struct)}.#{to_string(field)}"
 
-      # Acesso a um campo de uma estrutura com alias (não sei exatamente por que essa cláusula é necessária)
+      # Acesso a um campo de uma estrutura com alias (não sei exatamente por que essa cláusula é necessária
+      # por isso deixei um IO.puts para debug)
       {{:., _, [{:__aliases__, _, [struct]}, field]}, _, []} ->
         IO.puts("[BACKEND] Acessing #{struct} with alias and field #{field}")
         "#{to_string(struct)}.#{to_string(field)}"
