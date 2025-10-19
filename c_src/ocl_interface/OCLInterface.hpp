@@ -21,8 +21,11 @@ private:
 
     std::string getKernelCode(const char *file_name);
 
+    bool debug_logs;
+
 public:
     OCLInterface();
+    OCLInterface(bool enable_debug_logs);
     ~OCLInterface();
 
     std::vector<cl::Platform> getAvailablePlatforms();
@@ -52,4 +55,6 @@ public:
     cl::Device getSelectedDevice() const { return selected_device; }
     cl::Platform getSelectedPlatform() const { return selected_platform; }
     cl::CommandQueue getCommandQueue() const { return command_queue; }
+
+    void setDebugLogs(bool enable);
 };

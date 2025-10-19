@@ -1,6 +1,6 @@
 #include "OCLInterface.hpp"
 
-OCLInterface::OCLInterface()
+OCLInterface::OCLInterface(bool enable_debug_logs)
 {
     // Initialize OpenCL interface with null pointers for
     // for good error handling and predictable behavior
@@ -8,7 +8,11 @@ OCLInterface::OCLInterface()
     this->selected_device = nullptr;
     this->context = nullptr;
     this->command_queue = nullptr;
+
+    this->debug_logs = enable_debug_logs;
 }
+
+OCLInterface::OCLInterface() : OCLInterface(false) {}
 
 OCLInterface::~OCLInterface()
 {
@@ -17,6 +21,11 @@ OCLInterface::~OCLInterface()
     {
         this->command_queue.finish();
     }
+}
+
+void OCLInterface::setDebugLogs(bool enable)
+{
+    this->debug_logs = enable;
 }
 
 void OCLInterface::createContext()
@@ -36,7 +45,7 @@ std::string OCLInterface::getKernelCode(const char *file_name)
 
     if (!kernel_file.is_open())
     {
-        std::cerr << "Unable to open kernel file '" << file_name << "'." << std::endl;
+        std::cerr << "[OCL C++ Interface] Unable to open kernel file '" << file_name << "'." << std::endl;
         throw std::runtime_error("Kernel file not found");
     }
 
@@ -68,7 +77,10 @@ void OCLInterface::selectPlatform(cl::Platform p)
 
     this->selected_platform = p;
 
-    std::cout << "Selected OpenCL platform: " << this->selected_platform.getInfo<CL_PLATFORM_NAME>() << std::endl;
+    if (this->debug_logs)
+    {
+        std::cout << "[OCL C++ Interface] Selected OpenCL platform: " << this->selected_platform.getInfo<CL_PLATFORM_NAME>() << std::endl;
+    }
 }
 
 void OCLInterface::selectDefaultPlatform()
@@ -108,7 +120,10 @@ void OCLInterface::selectDevice(cl::Device d)
     this->createContext();
     this->createCommandQueue();
 
-    std::cout << "Selected OpenCL device: " << this->selected_device.getInfo<CL_DEVICE_NAME>() << std::endl;
+    if (this->debug_logs)
+    {
+        std::cout << "[OCL C++ Interface] Selected OpenCL device: " << this->selected_device.getInfo<CL_DEVICE_NAME>() << std::endl;
+    }
 }
 
 void OCLInterface::selectDefaultDevice(cl_device_type device_type)
@@ -133,13 +148,17 @@ cl::Program OCLInterface::createProgram(std::string &program_code)
     }
     catch (const cl::BuildError &err)
     {
-        std::cerr << "Build Error!" << std::endl;
+        std::cerr << "[OCL C++ Interface] Build Error!" << std::endl;
         std::cerr << "Device: " << err.getBuildLog().front().first.getInfo<CL_DEVICE_NAME>() << std::endl;
         std::cerr << "Log: " << err.getBuildLog().front().second << std::endl;
         throw std::runtime_error("Failed to build OpenCL program");
     }
 
-    std::cout << "OpenCL program created and builded successfully." << std::endl;
+    if (this->debug_logs)
+    {
+        std::cout << "[OCL C++ Interface] OpenCL program created and builded successfully." << std::endl;
+    }
+
     return program;
 }
 
@@ -162,11 +181,15 @@ cl::Kernel OCLInterface::createKernel(const cl::Program &program, const char *ke
 
     if (err != CL_SUCCESS || kernel() == nullptr)
     {
-        std::cerr << "Failed to create OpenCL kernel '" << kernel_name << "'. Error code: " << err << std::endl;
+        std::cerr << "[OCL C++ Interface] Failed to create OpenCL kernel '" << kernel_name << "'. Error code: " << err << std::endl;
         throw std::runtime_error("Failed to create OpenCL kernel");
     }
 
-    std::cout << "OpenCL kernel '" << kernel_name << "' created successfully." << std::endl;
+    if (this->debug_logs)
+    {
+        std::cout << "[OCL C++ Interface] OpenCL kernel '" << kernel_name << "' created successfully." << std::endl;
+    }
+
     return kernel;
 }
 
@@ -176,11 +199,15 @@ cl::Buffer OCLInterface::createBuffer(size_t size, cl_mem_flags flags, void *hos
 
     if (buffer() == nullptr)
     {
-        std::cerr << "Failed to create OpenCL buffer of size " << size << "." << std::endl;
+        std::cerr << "[OCL C++ Interface] Failed to create OpenCL buffer of size " << size << "." << std::endl;
         throw std::runtime_error("Failed to create OpenCL buffer");
     }
 
-    std::cout << "OpenCL buffer of size " << size << " created successfully." << std::endl;
+    if (this->debug_logs)
+    {
+        std::cout << "[OCL C++ Interface] OpenCL buffer of size " << size << " created successfully." << std::endl;
+    }
+
     return buffer;
 }
 
@@ -193,13 +220,16 @@ void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_r
     }
     catch (const cl::Error &err)
     {
-        std::cerr << "Failed to execute OpenCL kernel." << std::endl;
+        std::cerr << "[OCL C++ Interface] Failed to execute OpenCL kernel." << std::endl;
         std::cerr << "Error code: " << err.err() << std::endl;
         std::cerr << "Error message: " << err.what() << std::endl;
         throw std::runtime_error("Failed to execute OpenCL kernel");
     }
 
-    std::cout << "OpenCL kernel executed successfully." << std::endl;
+    if (this->debug_logs)
+    {
+        std::cout << "[OCL C++ Interface] OpenCL kernel executed successfully." << std::endl;
+    }
 }
 
 void OCLInterface::readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, size_t offset) const
@@ -220,7 +250,7 @@ void *OCLInterface::mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_fl
 
     if (err != CL_SUCCESS)
     {
-        std::cerr << "Failed to map OpenCL buffer to pinned memory. Error code: " << err << std::endl;
+        std::cerr << "[OCL C++ Interface] Failed to map OpenCL buffer to pinned memory. Error code: " << err << std::endl;
         throw std::runtime_error("Failed to map OpenCL buffer to pinned memory");
     }
 

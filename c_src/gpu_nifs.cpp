@@ -9,6 +9,8 @@
 #include <dlfcn.h>
 #include <assert.h>
 
+bool debug_logs = false;
+
 void dev_array_destructor(ErlNifEnv * /* env */, void *res)
 {
   cl::Buffer *dev_array = (cl::Buffer *)res;
@@ -18,7 +20,10 @@ void dev_array_destructor(ErlNifEnv * /* env */, void *res)
   // Erlang's garbage collector responsibility.
   dev_array->~Buffer();
 
-  std::cout << "[INFO] Device array resource destroyed." << std::endl;
+  if (debug_logs)
+  {
+    std::cout << "[C++ GPU NIF] Device array resource destroyed." << std::endl;
+  }
 }
 
 OCLInterface *open_cl = nullptr;
@@ -52,13 +57,16 @@ void init_ocl(ErlNifEnv *env)
 static int
 load(ErlNifEnv *env, void ** /* priv_data */, ERL_NIF_TERM /* load_info */)
 {
-  ARRAY_TYPE =
-      enif_open_resource_type(env, NULL, "gpu_ref", dev_array_destructor, ERL_NIF_RT_CREATE, NULL);
+  ARRAY_TYPE = enif_open_resource_type(
+      env,
+      NULL,
+      "gpu_ref",
+      dev_array_destructor,
+      ERL_NIF_RT_CREATE,
+      NULL);
 
   // Initialize OpenCL
   init_ocl(env);
-
-  std::cout << "GPU NIFs loaded successfully." << std::endl;
 
   return 0;
 }
@@ -72,7 +80,10 @@ unload(ErlNifEnv * /* env */, void * /* priv_data */)
     open_cl = nullptr;
   }
 
-  std::cout << "GPU NIFs unloaded successfully." << std::endl;
+  if (debug_logs)
+  {
+    std::cout << "[C++ GPU NIF] GPU NIFs unloaded successfully." << std::endl;
+  }
 }
 
 // This function compiles the given kernel code and launches it with the specified blocks and threads.
@@ -146,10 +157,13 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
                            blocks_z * threads_z);
   cl::NDRange local_range(threads_x, threads_y, threads_z);
 
-  std::cout << "[INFO] Kernel '" << kernel_name << "' will be executed with a global range of "
-            << global_range[0] << "x" << global_range[1] << "x" << global_range[2]
-            << " and a local range of " << local_range[0] << "x" << local_range[1]
-            << "x" << local_range[2] << "." << std::endl;
+  if (debug_logs)
+  {
+    std::cout << "[C++ GPU NIF] Kernel '" << kernel_name << "' will be executed with a global range of "
+              << global_range[0] << "x" << global_range[1] << "x" << global_range[2]
+              << " and a local range of " << local_range[0] << "x" << local_range[1]
+              << "x" << local_range[2] << "." << std::endl;
+  }
 
   // Getting the number of arguments given to the kernel
   int size_args;
@@ -267,7 +281,11 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
   try
   {
     open_cl->executeKernel(kernel, global_range, local_range);
-    std::cout << "[INFO] Kernel '" << kernel_name << "' executed successfully." << std::endl;
+
+    if (debug_logs)
+    {
+      std::cout << "[C++ GPU NIF] Kernel '" << kernel_name << "' executed successfully." << std::endl;
+    }
   }
   catch (const std::exception &e)
   {
@@ -341,6 +359,10 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   }
 
   // Allocate memory in host for the result
+
+  // -> FIXME: According to Erlang's docs, the function enif_make_new_binary is used to
+  // create SMALL binaries in the BEAM heap. For LARGE binaries, it is recommended to use
+  // enif_alloc_binary and enif_release_binary.
   void *host_result_data = (void *)enif_make_new_binary(env, data_size, &result);
 
   // Copying data from device to host
@@ -348,7 +370,10 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   {
     open_cl->readBuffer(dev_array, host_result_data, data_size);
 
-    std::cout << "[INFO] Data copied from device to host successfully." << std::endl;
+    if (debug_logs)
+    {
+      std::cout << "[C++ GPU NIF] Data copied from device to host successfully." << std::endl;
+    }
   }
   catch (const std::exception &e)
   {
@@ -432,8 +457,11 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int /* argc */, cons
     // Release the C++ handle to the resource, letting the BEAM manage its lifetime
     enif_release_resource(gpu_res);
 
-    std::cout << "[INFO] New GPU array created with " << nrow << " rows, " << ncol << " columns, and type " << type_name << std::endl;
-    std::cout << "[INFO] Data copied from host to device successfully." << std::endl;
+    if (debug_logs)
+    {
+      std::cout << "[C++ GPU NIF] New GPU array created with " << nrow << " rows, " << ncol << " columns, and type " << type_name << std::endl;
+      std::cout << "[C++ GPU NIF] Data copied from host to device successfully." << std::endl;
+    }
 
     return return_term;
   }
@@ -514,7 +542,10 @@ static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
     // Release the C++ handle to the resource, letting the BEAM manage its lifetime
     enif_release_resource(gpu_res);
 
-    std::cout << "[INFO] New GPU array created with " << nrow << " rows, " << ncol << " columns, and type " << type_name << std::endl;
+    if (debug_logs)
+    {
+      std::cout << "[C++ GPU NIF] New GPU array created with " << nrow << " rows, " << ncol << " columns, and type " << type_name << std::endl;
+    }
 
     return return_term;
   }
@@ -530,7 +561,33 @@ static ERL_NIF_TERM synchronize_nif(ErlNifEnv *env, int /* argc */, const ERL_NI
 {
   open_cl->synchronize();
 
-  std::cout << "[INFO] OpenCL command queue synchronized successfully." << std::endl;
+  if (debug_logs)
+  {
+    std::cout << "[C++ GPU NIF] OpenCL command queue synchronized successfully." << std::endl;
+  }
+
+  return enif_make_int(env, 0);
+}
+
+// This function sets the debug logs flag for the NIFs.
+static ERL_NIF_TERM set_debug_logs(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+  if (argc != 1)
+  {
+    std::cerr << "[ERROR] Invalid number of arguments for set_debug_logs." << std::endl;
+    return enif_make_badarg(env);
+  }
+
+  if (!enif_is_atom(env, argv[0]))
+  {
+    std::cerr << "[ERROR] Argument for set_debug_logs must be either 'true' or 'false' atoms." << std::endl;
+    return enif_make_badarg(env);
+  }
+
+  ERL_NIF_TERM true_atom = enif_make_atom(env, "true");
+
+  debug_logs = (enif_compare(argv[0], true_atom) == 0);
+  open_cl->setDebugLogs(debug_logs);
 
   return enif_make_int(env, 0);
 }
@@ -540,6 +597,7 @@ static ErlNifFunc nif_funcs[] = {
     {.name = "new_gpu_array_nif", .arity = 3, .fptr = new_gpu_array_nif, .flags = 0},
     {.name = "get_gpu_array_nif", .arity = 4, .fptr = get_gpu_array_nif, .flags = 0},
     {.name = "create_gpu_array_nx_nif", .arity = 4, .fptr = create_gpu_array_nx_nif, .flags = 0},
-    {.name = "synchronize_nif", .arity = 0, .fptr = synchronize_nif, .flags = 0}};
+    {.name = "synchronize_nif", .arity = 0, .fptr = synchronize_nif, .flags = 0},
+    {.name = "set_debug_logs", .arity = 1, .fptr = set_debug_logs, .flags = 0}};
 
 ERL_NIF_INIT(Elixir.OCLPolyHok, nif_funcs, &load, NULL, NULL, &unload)
