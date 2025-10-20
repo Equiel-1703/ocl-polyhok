@@ -2,7 +2,7 @@ require OCLPolyHok
 #Nx.default_backend(EXLA.Backend)
 #import Nx
 OCLPolyHok.defmodule Ske do
-include CAS
+include CAS_Poly
   defk map_2kernel(a1,a2,a3,size,f) do
     id = blockIdx.x * blockDim.x + threadIdx.x
     if(id < size) do
@@ -68,7 +68,7 @@ include CAS
 
   if (cacheIndex == 0) do
     current_value = ref4[0]
-    while(!(current_value == atomic_cas(ref4,current_value,f(cache[0],current_value)))) do
+    while(!(current_value == cas_float(ref4,current_value,f(cache[0],current_value)))) do
       current_value = ref4[0]
     end
   end

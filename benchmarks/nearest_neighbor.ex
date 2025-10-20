@@ -71,7 +71,7 @@ end
 
 
 OCLPolyHok.defmodule NN do
-  include CAS_Double
+  include CAS_Poly
   def euclid_seq(l,lat,lng), do: euclid_seq_(l,lat,lng,[])
   def euclid_seq_([m_lat,m_lng|array],lat,lng,data) do
     # m_lat = Enum.at(array,0)
@@ -128,7 +128,7 @@ OCLPolyHok.defmodule NN do
 
  if (cacheIndex == 0) do
    current_value = ref4[0]
-   while(!(current_value == atomic_cas(ref4,current_value,f(cache[0],current_value)))) do
+   while(!(current_value == cas_double(ref4,current_value,f(cache[0],current_value)))) do
      current_value = ref4[0]
    end
  end
