@@ -35,7 +35,7 @@ void init_ocl(ErlNifEnv *env)
   if (open_cl != nullptr)
     return; // Already initialized
 
-  open_cl = new OCLInterface();
+  open_cl = new OCLInterface(debug_logs);
 
   try
   {

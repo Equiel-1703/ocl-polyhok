@@ -21,9 +21,23 @@ defmodule JIT do
     # IO.inspect "inf_types: #{inspect inf_types}"
     {:fn, _, [{:->, _, [para, body]}]} = code
 
+    # Here I had to use the same principle as in compile_kernel to generate the parameter list
+    # If the parameter is a pointer, we need to add the global address space
     param_list =
       para
       |> Enum.map(fn {p, _, _} -> OCLPolyHok.OpenCLBackend.gen_para(p, Map.get(inf_types, p)) end)
+      |> Enum.filter(fn p -> p != nil end)
+      |> Enum.map(fn x ->
+        case String.contains?(x, "*") do
+          true ->
+            # If it is a pointer, we add the global address space
+            "__global #{x}"
+
+          false ->
+            # If it is not a pointer, we leave it as is
+            x
+        end
+      end)
       |> Enum.join(", ")
 
     param_vars =
@@ -89,7 +103,7 @@ defmodule JIT do
             "module",
             MapSet.new()
           )
-        
+
         # This will generate the function declaration in OpenCL code
         k = OCLPolyHok.OpenCLBackend.gen_function_jit(fname, param_list, opencl_body, fun_type)
 
@@ -218,7 +232,7 @@ defmodule JIT do
 
   @doc """
   Returns a list of types of all formal parameters of a kernel, excluding function types.
-  
+
   ## Parameters
 
     - `kernel_ast`: The abstract syntax tree (AST) of the kernel definition.
@@ -234,7 +248,8 @@ defmodule JIT do
     |> Enum.map(fn {p, _, _} -> delta[p] end)
     |> Enum.filter(fn p ->
       case p do
-        {_, _} -> false # Ignoring function types
+        # Ignoring function types
+        {_, _} -> false
         _ -> true
       end
     end)
@@ -295,7 +310,7 @@ defmodule JIT do
   ## Parameters
 
     - `fun`: The function, which can be either an anonymous function or a function reference.
-  
+
   ## Returns
     - The atom representing the function name.
   """
@@ -335,7 +350,7 @@ defmodule JIT do
   ## Parameters
 
     - `actual_param`: A list of actual parameters passed to the kernel or function.
-  
+
   ## Returns
     - A list of inferred types corresponding to the actual parameters. These types are represented as atoms.
 
@@ -495,8 +510,8 @@ defmodule JIT do
     end
   end
 
-  #Processes a list of definitions (kernels, device functions, include directives) and registers them 
-  #in the module server.
+  # Processes a list of definitions (kernels, device functions, include directives) and registers them 
+  # in the module server.
   #
   ## Parameters
   #
@@ -568,10 +583,10 @@ defmodule JIT do
 
   @doc """
   Finds all function calls within a kernel or device function definition.
-  
+
   ## Parameters
     - `ast`: The abstract syntax tree (AST) of the kernel or device function definition.
-  
+
   ## Returns
     - A list of function names (atoms) that are called within the kernel or device function.
   """
@@ -608,7 +623,7 @@ defmodule JIT do
   ## Parameters
     - `map`: A tuple containing a set of parameter names and a set of function names found.
     - `body`: The body of the kernel or device function.
-  
+
   ## Returns
     - An updated tuple with the set of parameter names and the set of function names found.
   """

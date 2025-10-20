@@ -131,6 +131,10 @@ defmodule OCLPolyHok do
     type
   end
 
+  def get_type(%Nx.Tensor{type: type}) do
+    type
+  end
+
   def get_shape_gnx({:nx, _type, shape, _name, _ref}) do
     shape
   end
