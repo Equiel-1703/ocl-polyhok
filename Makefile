@@ -4,6 +4,7 @@ C_SRC_DIR = c_src
 SRC = $(C_SRC_DIR)/gpu_nifs.cpp
 TARGET = $(BUILD_DIR)/gpu_nifs.so
 DEPENDENCIES = $(C_SRC_DIR)/ocl_interface/OCLInterface.cpp
+HEADER_DEPENDENCIES = $(C_SRC_DIR)/cldef.hpp $(C_SRC_DIR)/ocl_interface/OCLInterface.hpp
 
 CXX = g++
 CXXFLAGS = -shared -fPIC -Wall -Wextra -std=c++17
@@ -11,7 +12,7 @@ LINKFLAGS = -lOpenCL
 
 all: $(BUILD_DIR) $(TARGET)
 
-$(TARGET): $(SRC) $(DEPENDENCIES) $(C_SRC_DIR)/ocl_interface/OCLInterface.hpp
+$(TARGET): $(SRC) $(DEPENDENCIES) $(HEADER_DEPENDENCIES)
 	$(CXX) $(CXXFLAGS) $(DEPENDENCIES) $(SRC) -o $@ $(LINKFLAGS)
 
 # bmp: c_src/bmp_nifs.cu 
