@@ -10,6 +10,8 @@
 #include <assert.h>
 
 bool debug_logs = false;
+bool fp64_supported = false;
+bool int64_base_atomics_supported = false;
 
 void dev_array_destructor(ErlNifEnv * /* env */, void *res)
 {
@@ -44,6 +46,29 @@ void init_ocl(ErlNifEnv *env)
 
     // Selecting default GPU device
     open_cl->selectDefaultDevice(CL_DEVICE_TYPE_GPU);
+
+    // Check for extension support
+    std::vector<std::string> desired_extensions = {"cl_khr_fp64", "cl_khr_int64_base_atomics"};
+    std::vector<std::pair<std::string, bool>> extensions_support = open_cl->checkDeviceExtensions(desired_extensions);
+
+    // Update global flags for extension support
+    for (const auto &ext : extensions_support)
+    {
+      if (ext.first == "cl_khr_fp64")
+      {
+        fp64_supported = ext.second;
+      }
+      else if (ext.first == "cl_khr_int64_base_atomics")
+      {
+        int64_base_atomics_supported = ext.second;
+      }
+    }
+
+    // If both extensions are supported, then this device can handle the double type
+    if (fp64_supported && int64_base_atomics_supported)
+    {
+      open_cl->setBuildOptions("-D DOUBLE_SUPPORTED=1");
+    }
   }
   catch (const std::exception &e)
   {
@@ -570,17 +595,17 @@ static ERL_NIF_TERM synchronize_nif(ErlNifEnv *env, int /* argc */, const ERL_NI
 }
 
 // This function sets the debug logs flag for the NIFs.
-static ERL_NIF_TERM set_debug_logs(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM set_debug_logs_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
   if (argc != 1)
   {
-    std::cerr << "[ERROR] Invalid number of arguments for set_debug_logs." << std::endl;
+    std::cerr << "[ERROR] Invalid number of arguments for set_debug_logs_nif." << std::endl;
     return enif_make_badarg(env);
   }
 
   if (!enif_is_atom(env, argv[0]))
   {
-    std::cerr << "[ERROR] Argument for set_debug_logs must be either 'true' or 'false' atoms." << std::endl;
+    std::cerr << "[ERROR] Argument for set_debug_logs_nif must be either 'true' or 'false' atoms." << std::endl;
     return enif_make_badarg(env);
   }
 
@@ -592,12 +617,27 @@ static ERL_NIF_TERM set_debug_logs(ErlNifEnv *env, int argc, const ERL_NIF_TERM 
   return enif_make_int(env, 0);
 }
 
+// This function checks if the current device supports double precision floating points
+// and int64 base atomics extensions for CAS
+static ERL_NIF_TERM double_supported_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM /* argv */[])
+{
+  if (fp64_supported && int64_base_atomics_supported)
+  {
+    return enif_make_atom(env, "true");
+  }
+  else
+  {
+    return enif_make_atom(env, "false");
+  }
+}
+
 static ErlNifFunc nif_funcs[] = {
     {.name = "jit_compile_and_launch_nif", .arity = 7, .fptr = jit_compile_and_launch_nif, .flags = 0},
     {.name = "new_gpu_array_nif", .arity = 3, .fptr = new_gpu_array_nif, .flags = 0},
     {.name = "get_gpu_array_nif", .arity = 4, .fptr = get_gpu_array_nif, .flags = 0},
     {.name = "create_gpu_array_nx_nif", .arity = 4, .fptr = create_gpu_array_nx_nif, .flags = 0},
     {.name = "synchronize_nif", .arity = 0, .fptr = synchronize_nif, .flags = 0},
-    {.name = "set_debug_logs", .arity = 1, .fptr = set_debug_logs, .flags = 0}};
+    {.name = "set_debug_logs_nif", .arity = 1, .fptr = set_debug_logs_nif, .flags = 0},
+    {.name = "double_supported_nif", .arity = 0, .fptr = double_supported_nif, .flags = 0}};
 
 ERL_NIF_INIT(Elixir.OCLPolyHok, nif_funcs, &load, NULL, NULL, &unload)

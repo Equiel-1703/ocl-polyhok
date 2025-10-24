@@ -1,6 +1,3 @@
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-#pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
-
 inline int cas_int(volatile __global int *address, int oldv, int newv) {
     return atomic_cmpxchg(address, oldv, newv);
 }
@@ -29,6 +26,11 @@ inline float cas_float(volatile __global float *address, float oldv, float newv)
     return as_float(i_res);
 }
 
+#if DOUBLE_SUPPORTED
+
+#pragma OPENCL EXTENSION cl_khr_fp64 : enable
+#pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
+
 inline double cas_double(volatile __global double *address, double oldv, double newv) {
     volatile __global ulong *l_address = (volatile __global ulong *)address;
     ulong l_oldv = as_ulong(oldv);
@@ -40,3 +42,5 @@ inline double cas_double(volatile __global double *address, double oldv, double 
     // Return the double representation of the result
     return as_double(l_res);
 }
+
+#endif

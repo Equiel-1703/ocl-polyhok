@@ -121,6 +121,12 @@ defmodule OCLPolyHok do
     synchronize_nif()
   end
 
+  # ----------------- Set debug logs function -----------------
+
+  def set_debug_logs(enable) do
+    set_debug_logs_nif(enable)
+  end
+
   # ----------------- GPU NX Array functions -----------------
 
   def get_type_gnx({:nx, type, _shape, _name, _ref}) do
@@ -420,6 +426,11 @@ defmodule OCLPolyHok do
     # Infers the types of the kernel's variables and functions based on the AST and the delta map inferred above.
     inf_types = JIT.infer_types(kast, delta)
 
+    contains_double = Map.values(inf_types) |> Enum.any?(fn x -> (x == :double) or (x == :tdouble) end)
+    unless double_supported_nif() or not contains_double do
+      raise "Sorry, your OpenCL device does not support double precision floating point operations (fp64). The 'double' data type cannot be used in kernels."
+    end
+
     #  Returns a map of formal parameters that are functions and their actual names in OpenCL code.
     # This is needed so JIT.compile_kernel can replace the function parameters with their actual names in 
     # the generated OpenCL code.
@@ -494,8 +505,12 @@ defmodule OCLPolyHok do
   end
 
   # ----------------- NIF function definitions -----------------
-  def set_debug_logs(_enable) do
-    raise "NIF set_debug_logs/1 not implemented"
+  def set_debug_logs_nif(_enable) do
+    raise "NIF set_debug_logs_nif/1 not implemented"
+  end
+
+  def double_supported_nif() do
+    raise "NIF double_supported_nif/0 not implemented"
   end
 
   def new_gpu_array_nif(_l, _c, _type) do

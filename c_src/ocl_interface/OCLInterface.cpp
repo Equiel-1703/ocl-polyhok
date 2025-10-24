@@ -1,5 +1,7 @@
 #include "OCLInterface.hpp"
 
+OCLInterface::OCLInterface() : OCLInterface(false) {}
+
 OCLInterface::OCLInterface(bool enable_debug_logs)
 {
     // Initialize OpenCL interface with null pointers for
@@ -9,10 +11,9 @@ OCLInterface::OCLInterface(bool enable_debug_logs)
     this->context = nullptr;
     this->command_queue = nullptr;
 
+    this->build_options = "";
     this->debug_logs = enable_debug_logs;
 }
-
-OCLInterface::OCLInterface() : OCLInterface(false) {}
 
 OCLInterface::~OCLInterface()
 {
@@ -138,13 +139,42 @@ void OCLInterface::selectDefaultDevice(cl_device_type device_type)
     this->selectDevice(devices[0]);
 }
 
+std::vector<std::pair<std::string, bool>> OCLInterface::checkDeviceExtensions(std::vector<std::string> &extensions)
+{
+    if (this->selected_device() == nullptr)
+    {
+        throw std::runtime_error("No OpenCL device selected");
+    }
+
+    std::string device_extensions = this->selected_device.getInfo<CL_DEVICE_EXTENSIONS>();
+    std::vector<std::pair<std::string, bool>> results;
+
+    for (const auto &ext : extensions)
+    {
+        bool supported = (device_extensions.find(ext) != std::string::npos);
+        results.push_back(std::make_pair(ext, supported));
+    }
+
+    return results;
+}
+
+void OCLInterface::setBuildOptions(const std::string &options)
+{
+    this->build_options = options;
+
+    if (this->debug_logs)
+    {
+        std::cout << "[OCL C++ Interface] Set OpenCL build options: " << this->build_options << std::endl;
+    }
+}
+
 cl::Program OCLInterface::createProgram(std::string &program_code)
 {
     cl::Program program(this->context, program_code);
 
     try
     {
-        program.build(this->selected_device);
+        program.build(this->selected_device, this->build_options.c_str());
     }
     catch (const cl::BuildError &err)
     {

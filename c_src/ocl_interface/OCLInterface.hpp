@@ -21,12 +21,15 @@ private:
 
     std::string getKernelCode(const char *file_name);
 
+    std::string build_options;
     bool debug_logs;
 
 public:
     OCLInterface();
     OCLInterface(bool enable_debug_logs);
     ~OCLInterface();
+    
+    void setDebugLogs(bool enable);
 
     std::vector<cl::Platform> getAvailablePlatforms();
     void selectPlatform(cl::Platform p);
@@ -35,7 +38,9 @@ public:
     std::vector<cl::Device> getAvailableDevices(cl_device_type device_type = CL_DEVICE_TYPE_ALL);
     void selectDevice(cl::Device d);
     void selectDefaultDevice(cl_device_type device_type = CL_DEVICE_TYPE_ALL);
+    std::vector<std::pair<std::string, bool>> checkDeviceExtensions(std::vector<std::string> &extensions);
 
+    void setBuildOptions(const std::string &options);
     cl::Program createProgram(std::string &program_code);
     cl::Program createProgram(const char *program_code);
     cl::Program createProgramFromFile(const char *file_name);
@@ -51,10 +56,9 @@ public:
 
     void synchronize() const;
 
+    std::string getBuildOptions() const { return build_options; }
     cl::Context getContext() const { return context; }
     cl::Device getSelectedDevice() const { return selected_device; }
     cl::Platform getSelectedPlatform() const { return selected_platform; }
     cl::CommandQueue getCommandQueue() const { return command_queue; }
-
-    void setDebugLogs(bool enable);
 };
