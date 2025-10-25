@@ -428,7 +428,7 @@ defmodule OCLPolyHok do
 
     contains_double = Map.values(inf_types) |> Enum.any?(fn x -> (x == :double) or (x == :tdouble) end)
     unless double_supported_nif() or not contains_double do
-      raise "Sorry, your OpenCL device does not support double precision floating point operations (fp64). The 'double' data type cannot be used in kernels."
+      raise "[OCL-PolyHok] Sorry, your OpenCL device does not support double precision floating point operations (fp64). The 'double' data type cannot be used in kernels."
     end
 
     #  Returns a map of formal parameters that are functions and their actual names in OpenCL code.
@@ -464,6 +464,11 @@ defmodule OCLPolyHok do
 
     # Here we are concatenating the generated OpenCL code into a single string.
     prog = Enum.reduce(prog, "", fn x, y -> y <> x end)
+
+    # Print the generated OpenCL code for debugging purposes.
+    IO.puts("----- Generated OpenCL code for kernel '#{kernel_name}' -----")
+    IO.puts(prog)
+    IO.puts("-----------------------------------------------------------")
 
     # 'args' is a list of the actual arguments passed to the kernel, processed to remove any function references
     args = process_args_no_fun(l)
