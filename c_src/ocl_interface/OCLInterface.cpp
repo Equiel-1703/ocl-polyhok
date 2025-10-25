@@ -175,6 +175,13 @@ cl::Program OCLInterface::createProgram(std::string &program_code)
     try
     {
         program.build(this->selected_device, this->build_options.c_str());
+
+        // Print build log
+        std::string build_log = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(this->selected_device);
+        if (!build_log.empty())
+        {
+            std::cout << "[OCL C++ Interface] Build Log:\n" << build_log << std::endl;
+        }
     }
     catch (const cl::BuildError &err)
     {
