@@ -1,6 +1,6 @@
 require OCLPolyHok
 
-OCLPolyHok.set_debug_logs(true)
+# OCLPolyHok.set_debug_logs(true)
 
 OCLPolyHok.defmodule MM do
   defk map2xy2D_kernel(arr1, arr2, par, resp, size, f) do
@@ -53,12 +53,15 @@ m = String.to_integer(arg)
 # mat1 = OCLPolyHok.new_nx_from_function(m,m,{:f,32},fn -> :rand.uniform(1000) end )
 # mat2 = OCLPolyHok.new_nx_from_function(m,m,{:f,32},fn -> :rand.uniform(1000) end)
 
+IO.puts("Creating matrices of size #{m}x#{m}...")
 mat1 = Nx.tensor(Enum.to_list(1..(m * m)), type: :f32)
 mat2 = Nx.tensor(Enum.to_list(1..(m * m)), type: :f32)
 
+IO.puts("Reshaping matrices...")
 mat1 = Nx.reshape(mat1, {m, m})
 mat2 = Nx.reshape(mat2, {m, m})
 
+IO.puts("Starting multiplication...")
 prev = System.monotonic_time()
 
 _result =
@@ -74,6 +77,7 @@ _result =
 
 # comp mat1 mat2 m m m(fun mat1 mat2 m x y)
 
+IO.puts("Multiplication finished.")
 next = System.monotonic_time()
 
 IO.puts("OCLPolyHok\t#{m}\t#{System.convert_time_unit(next - prev, :native, :millisecond)} ")
