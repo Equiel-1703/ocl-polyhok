@@ -69,6 +69,9 @@ void init_ocl(ErlNifEnv *env)
     {
       open_cl->setBuildOptions("-D DOUBLE_SUPPORTED=1");
     }
+
+    // Add ignore warnings build option
+    open_cl->setBuildOptions(open_cl->getBuildOptions() + " -w");
   }
   catch (const std::exception &e)
   {
