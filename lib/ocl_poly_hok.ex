@@ -6,7 +6,7 @@ defmodule OCLPolyHok do
   # It prints a success message if the library is loaded successfully, and an error otherwise.
   # The BEAM VM is shut down if the NIF fails to load.
   def load_nifs() do
-    ret = :erlang.load_nif("./priv/gpu_nifs", 0)
+    ret = :erlang.load_nif(to_charlist("./priv/gpu_nifs"), 0)
 
     case ret do
       :ok ->
@@ -473,8 +473,13 @@ defmodule OCLPolyHok do
 
     if debug_logs do
       IO.puts("===== Generated OpenCL code for kernel '#{kernel_name}' =====")
+
       # We don't print the includes to reduce clutter
-      IO.puts(hd(comp) <> kernel)
+      case comp do
+        [] -> IO.puts(kernel)
+        l -> IO.puts(hd(l) <> kernel)
+      end
+
       IO.puts("==============================================================")
     end
 
