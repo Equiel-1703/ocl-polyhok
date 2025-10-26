@@ -124,6 +124,7 @@ defmodule OCLPolyHok do
   # ----------------- Set debug logs function -----------------
 
   def set_debug_logs(enable) do
+    Agent.update(:debug_logs_agent, fn _old -> enable end)
     set_debug_logs_nif(enable)
   end
 
@@ -426,7 +427,9 @@ defmodule OCLPolyHok do
     # Infers the types of the kernel's variables and functions based on the AST and the delta map inferred above.
     inf_types = JIT.infer_types(kast, delta)
 
-    contains_double = Map.values(inf_types) |> Enum.any?(fn x -> (x == :double) or (x == :tdouble) end)
+    contains_double =
+      Map.values(inf_types) |> Enum.any?(fn x -> x == :double or x == :tdouble end)
+
     unless double_supported_nif() or not contains_double do
       raise "[OCL-PolyHok] Sorry, your OpenCL device does not support double precision floating point operations (fp64). The 'double' data type cannot be used in kernels."
     end
@@ -465,10 +468,15 @@ defmodule OCLPolyHok do
     # Here we are concatenating the generated OpenCL code into a single string.
     prog = Enum.reduce(prog, "", fn x, y -> y <> x end)
 
-    # Print the generated OpenCL code for debugging purposes.
-    # IO.puts("===== Generated OpenCL code for kernel '#{kernel_name}' =====")
-    # IO.puts(hd(comp) <> kernel) # We don't print the includes to reduce clutter
-    # IO.puts("==============================================================")
+    # Print the generated OpenCL code for debugging purposes if debug logs is enabled.
+    debug_logs = Agent.get(:debug_logs_agent, fn state -> state end)
+
+    if debug_logs do
+      IO.puts("===== Generated OpenCL code for kernel '#{kernel_name}' =====")
+      # We don't print the includes to reduce clutter
+      IO.puts(hd(comp) <> kernel)
+      IO.puts("==============================================================")
+    end
 
     # 'args' is a list of the actual arguments passed to the kernel, processed to remove any function references
     args = process_args_no_fun(l)
