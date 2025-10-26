@@ -330,7 +330,6 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   int nrow, ncol;
   size_t data_size;
   char type_name[1024];
-  ERL_NIF_TERM result;
 
   cl::Buffer dev_array;
   cl::Buffer *array_res = nullptr;
@@ -387,11 +386,21 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   }
 
   // Allocate memory in host for the result
+  // According to Erlang's docs, for LARGE binaries, it is recommended to use
+  // enif_alloc_binary.
+  ErlNifBinary host_bin;
+  ERL_NIF_TERM erl_term_result;
 
-  // -> FIXME: According to Erlang's docs, the function enif_make_new_binary is used to
-  // create SMALL binaries in the BEAM heap. For LARGE binaries, it is recommended to use
-  // enif_alloc_binary and enif_release_binary.
-  void *host_result_data = (void *)enif_make_new_binary(env, data_size, &result);
+  if (!enif_alloc_binary(data_size, &host_bin))
+  {
+    char message[200];
+    strcpy(message, "[ERROR] (get_gpu_array_nif) failed to allocate binary of size ");
+    strcat(message, std::to_string(data_size).c_str());
+    return enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
+  }
+
+  // Getting pointer to the allocated binary data
+  void *host_result_data = (void *)host_bin.data;
 
   // Copying data from device to host
   try
@@ -409,7 +418,9 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
     return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
 
-  return result;
+  // Creating the Erlang binary term to return
+  erl_term_result = enif_make_binary(env, &host_bin);
+  return erl_term_result;
 }
 
 // This function creates a new GPU array with the specified number of rows, columns, and type.
