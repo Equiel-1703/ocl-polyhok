@@ -1,5 +1,7 @@
 require OCLPolyHok
 
+OCLPolyHok.set_debug_logs(true)
+
 OCLPolyHok.defmodule ArraySum do
   defk sum_ker(a1, a2, result_array, size) do
     index = blockIdx.x * blockDim.x + threadIdx.x
