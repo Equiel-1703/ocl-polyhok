@@ -432,7 +432,7 @@ defmodule OCLPolyHok do
     end
 
     #  Returns a map of formal parameters that are functions and their actual names in OpenCL code.
-    # This is needed so JIT.compile_kernel can replace the function parameters with their actual names in 
+    # This is needed so JIT.compile_kernel can replace the function parameters with their actual names in
     # the generated OpenCL code.
     subs = JIT.get_function_parameters(kast, l)
 
@@ -466,9 +466,9 @@ defmodule OCLPolyHok do
     prog = Enum.reduce(prog, "", fn x, y -> y <> x end)
 
     # Print the generated OpenCL code for debugging purposes.
-    IO.puts("===== Generated OpenCL code for kernel '#{kernel_name}' =====")
-    IO.puts(hd(comp) <> kernel) # We don't print the includes to reduce clutter
-    IO.puts("==============================================================")
+    # IO.puts("===== Generated OpenCL code for kernel '#{kernel_name}' =====")
+    # IO.puts(hd(comp) <> kernel) # We don't print the includes to reduce clutter
+    # IO.puts("==============================================================")
 
     # 'args' is a list of the actual arguments passed to the kernel, processed to remove any function references
     args = process_args_no_fun(l)
