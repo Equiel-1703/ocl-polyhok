@@ -72,6 +72,8 @@ Once you have the prerequisites, follow these steps to set up the project:
     mix run benchmarks/julia.ex 1024
     ```
 
+<img width="1024" height="1024" alt="juliaske.bmp" src="https://github.com/user-attachments/assets/0bd736da-aeae-4702-9c84-15b5c5674ed1" />
+
 ## Licensing
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
