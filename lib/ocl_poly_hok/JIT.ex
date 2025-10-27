@@ -57,7 +57,8 @@ defmodule JIT do
   end
 
   def compile_function({name, type}) do
-    # IO.puts "Compile function: #{name}"
+    # IO.puts("Compile function: #{name}")
+
     nast = OCLPolyHok.load_ast(name)
 
     case nast do
@@ -66,11 +67,8 @@ defmodule JIT do
 
       {fast, fun_graph} ->
         delta = gen_delta_from_type(fast, type)
-        #   IO.inspect "Delta: #{inspect delta}"
-        # IO.inspect "Type: #{inspect type}"
-        #      IO.inspect "Call graph: #{inspect fun_graph}"
         inf_types = infer_types(fast, delta)
-        #  IO.inspect "inf_types: #{inspect inf_types}"
+
         {:defd, _iinfo, [header, [body]]} = fast
         {fname, _, para} = header
 
@@ -78,6 +76,18 @@ defmodule JIT do
           para
           |> Enum.map(fn {p, _, _} ->
             OCLPolyHok.OpenCLBackend.gen_para(p, Map.get(inf_types, p))
+          end)
+          |> Enum.filter(fn p -> p != nil end)
+          |> Enum.map(fn x ->
+            case String.contains?(x, "*") do
+              true ->
+                # If it is a pointer, we add the global address space
+                "__global #{x}"
+
+              false ->
+                # If it is not a pointer, we leave it as is
+                x
+            end
           end)
           |> Enum.join(", ")
 
@@ -510,7 +520,7 @@ defmodule JIT do
     end
   end
 
-  # Processes a list of definitions (kernels, device functions, include directives) and registers them 
+  # Processes a list of definitions (kernels, device functions, include directives) and registers them
   # in the module server.
   #
   ## Parameters
