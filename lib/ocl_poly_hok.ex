@@ -427,9 +427,11 @@ defmodule OCLPolyHok do
     # Infers the types of the kernel's variables and functions based on the AST and the delta map inferred above.
     inf_types = JIT.infer_types(kast, delta)
 
+    # Check if the inferred types contain 'double' or 'tdouble' types
     contains_double =
       Map.values(inf_types) |> Enum.any?(fn x -> x == :double or x == :tdouble end)
 
+    # If double precision is used, check if the device supports it.
     unless double_supported_nif() or not contains_double do
       raise "[OCL-PolyHok] Sorry, your OpenCL device does not support double precision floating point operations (fp64). The 'double' data type cannot be used in kernels."
     end
