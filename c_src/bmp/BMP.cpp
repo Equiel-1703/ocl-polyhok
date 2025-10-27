@@ -41,14 +41,6 @@ BMP::BMP(const char *filename, int width, int height, int bitsPerPixel)
     this->infoHeader.biYPelsPerMeter = 2835;            // 72 DPI in PPM
     this->infoHeader.biClrUsed = 0;                     // All colors are important
     this->infoHeader.biClrImportant = 0;                // All colors are important
-
-    // Print info to console
-    std::cout << "[BMP] Created BMP file: " << filename << std::endl;
-    std::cout << "Dimensions: " << width << "x" << height << ", " << BITS_PER_PIXEL << " bits per pixel" << std::endl;
-    std::cout << "BMP file header size: " << sizeof(HEADER) << " bytes" << std::endl;
-    std::cout << "BMP info header size: " << sizeof(INFOHEADER) << " bytes" << std::endl;
-    std::cout << "BMP file size: " << this->header.bfSize << " bytes" << std::endl;
-    std::cout << "BMP image row size: " << rowSizeBytes << " bytes" << std::endl;
 }
 
 BMP::~BMP()
