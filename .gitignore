@@ -20,3 +20,6 @@ mix.lock
 
 # Ignore compiled libraries
 /priv/*
+
+# Ignore BMPs
+*.bmp
