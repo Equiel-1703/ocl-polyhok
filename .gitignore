@@ -19,4 +19,4 @@ mix.lock
 /doc
 
 # Ignore compiled libraries
-/priv/gpu_nifs.so
+/priv/*
