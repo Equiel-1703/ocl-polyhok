@@ -329,7 +329,6 @@ defmodule OCLPolyHok.OpenCLBackend do
     end
   end
 
-
   # Tries to retrieve the actual name of a function from the types server.
   defp check_fun(fun) do
     send(:types_server, {:check_fun, fun, self()})
@@ -411,7 +410,7 @@ defmodule OCLPolyHok.OpenCLBackend do
           end
 
         "__local #{atype} #{name}[#{index}];"
-      
+
       {:__syncthreads, _, _} ->
         # OpenCL equivalent of __syncthreads() in CUDA
         "barrier(CLK_LOCAL_MEM_FENCE);"
@@ -505,6 +504,10 @@ defmodule OCLPolyHok.OpenCLBackend do
       {{:., _, [{:__aliases__, _, [struct]}, field]}, _, []} ->
         IO.puts("[BACKEND] Acessing #{struct} with alias and field #{field}")
         "#{to_string(struct)}.#{to_string(field)}"
+
+      # Square root of float (in OpenCL we don't need special function names for different types)
+      {:sqrtf, _, [arg]} ->
+        "sqrt(#{gen_exp(arg)})"
 
       {op, _, args} when op in [:+, :-, :/, :*, :<=, :<, :>, :>=, :&&, :||, :!, :!=, :==] ->
         case args do
