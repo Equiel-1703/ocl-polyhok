@@ -18,8 +18,13 @@ mix.lock
 /deps
 /doc
 
-# Ignore compiled libraries
+# Ignore compiled libraries and binaries
 /priv/*
+*.so
+*.dll
+*.dylib
+*.exe
+*.out
 
 # Ignore BMPs
 *.bmp
