@@ -477,7 +477,7 @@ defmodule OCLPolyHok do
       # We don't print the includes to reduce clutter
       case comp do
         [] -> IO.puts(kernel)
-        l -> IO.puts(hd(l) <> kernel)
+        l -> IO.puts(Enum.reduce(l, "", fn x, y -> y <> x end) <> kernel)
       end
 
       IO.puts("==============================================================")
