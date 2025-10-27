@@ -3,7 +3,7 @@ require OCLPolyHok
 defmodule BMP do
   @on_load :load_nifs
   def load_nifs do
-      :erlang.load_nif('./priv/bmp_nifs', 0)
+      :erlang.load_nif(~c"./priv/bmp_nifs", 0)
   end
   def gen_bmp_int_nif(_string,_dim,_mat) do
       raise "gen_bmp_nif not implemented"
@@ -181,7 +181,7 @@ defmodule Main do
         IO.puts "OCLPolyHok\t#{width}\t#{System.convert_time_unit(next-prev,:native,:millisecond)} "
 
 
-        BMP.gen_bmp_int('ray.bmp',width,image)
+        BMP.gen_bmp_int(~c"ray.bmp",width,image)
 
         #image = Matrex.to_list(image)
 
