@@ -147,8 +147,18 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
   enif_get_string(env, e_code, code, size_code + 1, ERL_NIF_LATIN1);
 
   // Creating program and kernel objects
-  cl::Program program = open_cl->createProgram(code);
-  cl::Kernel kernel = open_cl->createKernel(program, kernel_name);
+  cl::Program program;
+  cl::Kernel kernel;
+
+  try
+  {
+    program = open_cl->createProgram(code);
+    kernel = open_cl->createKernel(program, kernel_name);
+  }
+  catch (const std::exception &e)
+  {
+    return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
+  }
 
   // Getting blocks and threads tuples pointers
   const ERL_NIF_TERM *tuple_blocks, *tuple_threads;
@@ -180,9 +190,7 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
   // The global range is the total number of threads (work-items) in each dimension
   // The local range is the size of each block (work-group) in every dimension
   // So we need to calculate the global range in each dimension
-  cl::NDRange global_range(blocks_x * threads_x,
-                           blocks_y * threads_y,
-                           blocks_z * threads_z);
+  cl::NDRange global_range(blocks_x * threads_x, blocks_y * threads_y, blocks_z * threads_z);
   cl::NDRange local_range(threads_x, threads_y, threads_z);
 
   if (debug_logs)
@@ -317,7 +325,6 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
   }
   catch (const std::exception &e)
   {
-    std::cerr << "[ERROR] Error executing kernel '" << kernel_name << "': " << e.what() << std::endl;
     return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
 

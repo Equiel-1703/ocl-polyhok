@@ -433,7 +433,7 @@ defmodule OCLPolyHok do
 
     # If double precision is used, check if the device supports it.
     unless double_supported_nif() or not contains_double do
-      raise "[OCL-PolyHok] Sorry, your OpenCL device does not support double precision floating point operations (fp64). The 'double' data type cannot be used in kernels."
+      raise "[OCL-PolyHok] Your OpenCL device does not support double precision floating point operations (fp64). The 'double' data type cannot be used in kernels."
     end
 
     #  Returns a map of formal parameters that are functions and their actual names in OpenCL code.

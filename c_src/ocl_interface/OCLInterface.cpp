@@ -175,19 +175,18 @@ cl::Program OCLInterface::createProgram(std::string &program_code)
     try
     {
         program.build(this->selected_device, this->build_options.c_str());
-
-        // // Print build log
-        // std::string build_log = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(this->selected_device);
-        // if (!build_log.empty())
-        // {
-        //     std::cout << "[OCL C++ Interface] Build Log:\n" << build_log << std::endl;
-        // }
     }
     catch (const cl::BuildError &err)
     {
         std::cerr << "[OCL C++ Interface] Build Error!" << std::endl;
-        std::cerr << "Device: " << err.getBuildLog().front().first.getInfo<CL_DEVICE_NAME>() << std::endl;
-        std::cerr << "Log: " << err.getBuildLog().front().second << std::endl;
+
+        std::string device_name = err.getBuildLog().front().first.getInfo<CL_DEVICE_NAME>();
+        std::string build_log = err.getBuildLog().front().second;
+
+        std::cerr << "> Device: " << device_name << std::endl;
+        std::cerr << "> Build Log:\n" << std::endl;
+        std::cerr << build_log << std::endl;
+        
         throw std::runtime_error("Failed to build OpenCL program");
     }
 
@@ -258,8 +257,8 @@ void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_r
     catch (const cl::Error &err)
     {
         std::cerr << "[OCL C++ Interface] Failed to execute OpenCL kernel." << std::endl;
-        std::cerr << "Error code: " << err.err() << std::endl;
-        std::cerr << "Error message: " << err.what() << std::endl;
+        std::cerr << "> Error code: " << err.err() << std::endl;
+        std::cerr << "> Error message: " << err.what() << std::endl;
         throw std::runtime_error("Failed to execute OpenCL kernel");
     }
 
