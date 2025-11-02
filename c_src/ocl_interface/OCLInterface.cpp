@@ -184,9 +184,10 @@ cl::Program OCLInterface::createProgram(std::string &program_code)
         std::string build_log = err.getBuildLog().front().second;
 
         std::cerr << "> Device: " << device_name << std::endl;
-        std::cerr << "> Build Log:\n" << std::endl;
+        std::cerr << "> Build Log:\n"
+                  << std::endl;
         std::cerr << build_log << std::endl;
-        
+
         throw std::runtime_error("Failed to build OpenCL program");
     }
 
@@ -231,20 +232,68 @@ cl::Kernel OCLInterface::createKernel(const cl::Program &program, const char *ke
 
 cl::Buffer OCLInterface::createBuffer(size_t size, cl_mem_flags flags, void *host_ptr)
 {
-    cl::Buffer buffer(this->context, flags, size, host_ptr);
-
-    if (buffer() == nullptr)
+    try
     {
-        std::cerr << "[OCL C++ Interface] Failed to create OpenCL buffer of size " << size << "." << std::endl;
-        throw std::runtime_error("Failed to create OpenCL buffer");
-    }
+        cl::Buffer buffer(this->context, flags, size, host_ptr);
 
-    if (this->debug_logs)
+        if (this->debug_logs)
+        {
+            std::cout << "[OCL C++ Interface] OpenCL buffer of size " << size << " created successfully." << std::endl;
+        }
+
+        return buffer;
+    }
+    catch (const cl::Error &e)
     {
-        std::cout << "[OCL C++ Interface] OpenCL buffer of size " << size << " created successfully." << std::endl;
-    }
+        // e.what() provides a description of the error, for example "clCreateBuffer"
+        // e.err() provides the OpenCL error code (e.g., CL_MEM_OBJECT_ALLOCATION_FAILURE)
+        cl_int error_code = e.err();
+        std::string error_msg;
 
-    return buffer;
+        // Retrieve device memory info for better error messages
+        cl_ulong global_mem = this->selected_device.getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>();   // Total global memory size
+        cl_ulong max_alloc = this->selected_device.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE>(); // Max allocation size allowed
+
+        // Converting sizes to MB for easier readability
+        cl_ulong global_mem_mb = global_mem / (1024 * 1024);
+        cl_ulong max_alloc_mb = max_alloc / (1024 * 1024);
+        cl_ulong buff_size_mb = size / (1024 * 1024);
+
+        switch (error_code)
+        {
+        case CL_MEM_OBJECT_ALLOCATION_FAILURE:
+            std::cerr << "[OCL C++ Interface] Error: GPU out of memory for buffer allocation of size " << size << "." << std::endl;
+            std::cerr << "> Device Global Memory Size: " << global_mem_mb << " MB" << std::endl;
+            std::cerr << "> Requested Buffer Size: " << buff_size_mb << " MB" << std::endl;
+
+            error_msg = "GPU out of memory";
+            break;
+
+        case CL_INVALID_BUFFER_SIZE:
+            std::cerr << "[OCL C++ Interface] Error: Invalid buffer size requested: " << size << " bytes." << std::endl;
+            std::cerr << ">  Device Global Memory Size: " << global_mem_mb << " MB" << std::endl;
+            std::cerr << ">  Device Max Allocation Size: " << max_alloc_mb << " MB" << std::endl;
+            std::cerr << ">  Requested Buffer Size: " << buff_size_mb << " MB" << std::endl;
+
+            error_msg = "Invalid buffer size requested";
+            break;
+
+        default:
+            std::cerr << "[OCL C++ Interface] Failed to create OpenCL buffer of size " << size << "." << std::endl;
+            std::cerr << "> Error: " << e.what() << std::endl;
+            std::cerr << "> Error code: " << std::to_string(error_code) << std::endl;
+            
+            std::cerr << "\n[Device Memory Info]" << std::endl;
+            std::cerr << "> Device Global Memory Size: " << global_mem_mb << " MB" << std::endl;
+            std::cerr << "> Device Max Allocation Size: " << max_alloc_mb << " MB" << std::endl;
+            std::cerr << "> Requested Buffer Size: " << buff_size_mb << " MB" << std::endl;
+
+            error_msg = std::string(e.what()) + " (Error code: " + std::to_string(error_code) + ")";
+            break;
+        }
+
+        throw std::runtime_error(error_msg);
+    }
 }
 
 void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_range, const cl::NDRange &local_range)

@@ -513,7 +513,6 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int /* argc */, cons
   }
   catch (const std::exception &e)
   {
-    std::cerr << "[ERROR] (create_gpu_array_nx_nif) creating GPU buffer: " << e.what() << std::endl;
     return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
 }
@@ -597,7 +596,6 @@ static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   }
   catch (const std::exception &e)
   {
-    std::cerr << "[ERROR] Failed to create GPU buffer: " << e.what() << std::endl;
     return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
 }
