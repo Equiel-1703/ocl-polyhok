@@ -79,7 +79,7 @@ result_gpu = OCLPolyHok.new_gnx(dim*dim,4,{:s,32})
 
 prev = System.monotonic_time()
 
-image = result_gpu
+_image = result_gpu
   |> Julia.mapgen2D_step_xy_1para_noret(dim,dim, &Julia.julia_function/4)
   |> OCLPolyHok.get_gnx
 
@@ -87,4 +87,4 @@ next = System.monotonic_time()
 
 IO.puts "OCLPolyHok\t#{dim}\t#{System.convert_time_unit(next-prev,:native,:millisecond)}"
 
-BMP.gen_bmp_int(~c"juliaske.bmp",dim,image)
+# BMP.gen_bmp_int(~c"juliaske.bmp",dim,image)

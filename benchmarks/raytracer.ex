@@ -175,13 +175,13 @@ defmodule Main do
 
        # OCLPolyHok.spawn_jit(&RayTracer.raytracing/4,{trunc(width/16),trunc(height/16),1},{16,16,1},[width, height, refSphere, refImag])
 
-        image = OCLPolyHok.get_gnx(ref_image)
+        _image = OCLPolyHok.get_gnx(ref_image)
 
         next = System.monotonic_time()
         IO.puts "OCLPolyHok\t#{width}\t#{System.convert_time_unit(next-prev,:native,:millisecond)} "
 
 
-        BMP.gen_bmp_int(~c"ray.bmp",width,image)
+        # BMP.gen_bmp_int(~c"ray.bmp",width,image)
 
         #image = Matrex.to_list(image)
 
