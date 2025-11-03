@@ -207,18 +207,20 @@ int main(int argc, char *argv[])
     cudaFree(dev_b);
     cudaFree(dev_resp);
     cudaFree(d_final);
-    
+
     // Measure time using chrono
     auto end_chrono = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> time_chrono = end_chrono - start_chrono;
-    
+
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&time, start, stop);
-    
+
     printf("CUDA\t%d\t%3.1f\n", N, time);
-    printf("CUDA CHRONO\t%d\t%3.1f\n", N, time_chrono.count());
     printf("Result: %f\n", final[0]);
+    printf("-------------------------\n");
+    printf("Elapsed time (chrono): %3.5f ms\n", time_chrono.count());
+    printf("Elapsed time (CUDA events): %3.5f ms\n", time);
 
     /*
         for(int i=0; i<10; i++) {
