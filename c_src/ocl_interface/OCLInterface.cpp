@@ -301,7 +301,6 @@ void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_r
     try
     {
         this->command_queue.enqueueNDRangeKernel(kernel, cl::NullRange, global_range, local_range);
-        this->command_queue.finish();
     }
     catch (const cl::Error &err)
     {
@@ -345,7 +344,6 @@ void *OCLInterface::mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_fl
 void OCLInterface::unMapHostPtr(const cl::Buffer &buffer, void *host_ptr) const
 {
     this->command_queue.enqueueUnmapMemObject(buffer, host_ptr);
-    this->command_queue.finish(); // Ensure the unmap operation is complete
 }
 
 void OCLInterface::synchronize() const
