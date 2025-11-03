@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <time.h>
+#include <chrono>
 
 
 __device__ static float atomic_cas(float* address, float oldv, float newv)
@@ -135,6 +136,8 @@ for(int i=0; i<tot; i++) {
     cudaEventCreate(&stop) ;
     cudaEventRecord(start, 0) ;
 
+    // Measure time using chrono
+    auto start_chrono = std::chrono::high_resolution_clock::now();
 
 	cudaMalloc((void**)&dev_a, N*sizeof(float));
     j_error = cudaGetLastError();
@@ -187,11 +190,16 @@ for(int i=0; i<tot; i++) {
     cudaFree(dev_resp);
     cudaFree(d_final);
     
+    // Measure time using chrono
+    auto end_chrono = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> time_chrono = end_chrono - start_chrono;
+
 	cudaEventRecord(stop, 0) ;
     cudaEventSynchronize(stop) ;
     cudaEventElapsedTime(&time, start, stop) ;
 
     printf("CUDA\t%d\t%3.1f\n", N,time);
+    printf("CUDA CHRONO\t%d\t%3.1f\n", N,time_chrono.count());
 
 /*
     for(int i=0; i<10; i++) {
