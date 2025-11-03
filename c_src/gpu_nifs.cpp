@@ -9,6 +9,8 @@
 #include <dlfcn.h>
 #include <assert.h>
 
+#include <chrono>
+
 bool debug_logs = false;
 bool fp64_supported = false;
 bool int64_base_atomics_supported = false;
@@ -392,11 +394,18 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
     return enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
   }
 
+  // Final term to return to Erlang VM
+  ERL_NIF_TERM erl_term_result;
+
+  // Measure time to allocate host memory
+  auto start_alloc = std::chrono::high_resolution_clock::now();
+
+#ifndef OLD_BACKEND
   // Allocate memory in host for the result
   // According to Erlang's docs, for LARGE binaries, it is recommended to use
   // enif_alloc_binary.
+
   ErlNifBinary host_bin;
-  ERL_NIF_TERM erl_term_result;
 
   if (!enif_alloc_binary(data_size, &host_bin))
   {
@@ -408,6 +417,32 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
 
   // Getting pointer to the allocated binary data
   void *host_result_data = (void *)host_bin.data;
+#else
+  // According to Erlang's docs, the function enif_make_new_binary is used to
+  // create SMALL binaries in the BEAM heap. For LARGE binaries, it is recommended to use
+  // enif_alloc_binary and enif_release_binary...
+
+  // However, I'm not really sure what is considered SMALL or LARGE here, neither
+  // if that is true or not.
+
+  void *host_result_data = (void *)enif_make_new_binary(env, data_size, &erl_term_result);
+#endif
+
+  // Finish measuring time to allocate host memory
+
+  auto end_alloc = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> alloc_duration = end_alloc - start_alloc;
+
+  std::cout << "[C++ GPU NIF] Host memory allocation took " << alloc_duration.count() << " ms." << std::endl;
+
+#ifndef OLD_BACKEND
+  std::cout << "[C++ GPU NIF] Used NEW BACKEND." << std::endl;
+#else
+  std::cout << "[C++ GPU NIF] Used OLD BACKEND." << std::endl;
+#endif
+
+  // Measure time to copy data from device to host
+  auto start_copy = std::chrono::high_resolution_clock::now();
 
   // Copying data from device to host
   try
@@ -425,8 +460,17 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
     return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
 
+  // Finish measuring time to copy data from device to host
+  auto end_copy = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> copy_duration = end_copy - start_copy;
+
+  std::cout << "[C++ GPU NIF] Data transfer from device to host took " << copy_duration.count() << " ms." << std::endl;
+
+#ifndef OLD_BACKEND
   // Creating the Erlang binary term to return
   erl_term_result = enif_make_binary(env, &host_bin);
+#endif
+
   return erl_term_result;
 }
 

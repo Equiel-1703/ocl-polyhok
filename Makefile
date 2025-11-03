@@ -3,6 +3,7 @@ C_SRC_DIR = c_src
 
 SRC = $(C_SRC_DIR)/gpu_nifs.cpp
 TARGET = $(BUILD_DIR)/gpu_nifs.so
+OLD_BACKEND_FLAG = -DOLD_BACKEND
 DEPENDENCIES = $(C_SRC_DIR)/ocl_interface/OCLInterface.cpp
 HEADER_DEPENDENCIES = $(C_SRC_DIR)/cldef.hpp $(C_SRC_DIR)/ocl_interface/OCLInterface.hpp
 
@@ -15,11 +16,14 @@ CXX = g++
 CXXFLAGS = -shared -fPIC -Wall -Wextra -std=c++17
 LINKFLAGS = -lOpenCL
 
-all: $(BUILD_DIR) $(TARGET)
+all: new_backend
 bmp: $(BUILD_DIR) $(BMP_TARGET)
 
-$(TARGET): $(SRC) $(DEPENDENCIES) $(HEADER_DEPENDENCIES)
-	$(CXX) $(CXXFLAGS) $(DEPENDENCIES) $(SRC) -o $@ $(LINKFLAGS)
+new_backend: $(SRC) $(DEPENDENCIES) $(HEADER_DEPENDENCIES)
+	$(CXX) $(CXXFLAGS) $(DEPENDENCIES) $(SRC) -o $(TARGET) $(LINKFLAGS)
+
+old_backend: $(SRC) $(DEPENDENCIES) $(HEADER_DEPENDENCIES)
+	$(CXX) $(CXXFLAGS) $(OLD_BACKEND_FLAG) $(DEPENDENCIES) $(SRC) -o $(TARGET) $(LINKFLAGS)
 
 $(BMP_TARGET): $(BMP_SRC) $(BMP_DEPENDENCIES) $(BMP_HEADER_DEPENDENCIES)
 	$(CXX) $(CXXFLAGS) $(BMP_DEPENDENCIES) $(BMP_SRC) -o $@
@@ -30,4 +34,4 @@ $(BUILD_DIR):
 clean:
 	rm -rf $(BUILD_DIR)/*.so
 
-.PHONY: all bmp clean
+.PHONY: all bmp new_backend old_backend clean
