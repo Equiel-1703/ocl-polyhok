@@ -131,12 +131,13 @@ int main(int argc, char *argv[])
   cl::Buffer buffer_resp(context, CL_MEM_READ_WRITE, N * sizeof(float));
   cl::Buffer d_final(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(float), final);
 
+  // Ensure all buffers are created
+  queue.finish();
+
   auto buffer_creation_end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> buffer_creation_time = buffer_creation_end - start;
 
-  // Ensure all buffers are created before starting the timing
-  queue.finish();
-
+  // Set kernel arguments
   map_2kernel.setArg(0, buffer_a);
   map_2kernel.setArg(1, buffer_b);
   map_2kernel.setArg(2, buffer_resp);
