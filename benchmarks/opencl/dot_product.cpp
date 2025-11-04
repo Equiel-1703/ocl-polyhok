@@ -159,13 +159,9 @@ int main(int argc, char *argv[])
 
   // Calculate total time using event profiling info
   cl_ulong map_start = map_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-  cl_ulong map_end = map_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-  cl_ulong reduce_start = reduce_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-  cl_ulong reduce_end = reduce_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-  cl_ulong read_start = read_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
   cl_ulong read_end = read_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
 
-  double time = ((map_end - map_start) + (reduce_end - reduce_start) + (read_end - read_start)) / 1e6; // Convert to milliseconds
+  double time = (read_end - map_start) / 1e6; // Convert to milliseconds
 
   printf("OpenCL\t%d\t%3.1f\n", N, time);
   printf("Result: %f\n", final[0]);
