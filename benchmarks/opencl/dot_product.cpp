@@ -131,6 +131,12 @@ int main(int argc, char *argv[])
   cl::Buffer buffer_resp(context, CL_MEM_READ_WRITE, N * sizeof(float));
   cl::Buffer d_final(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(float), final);
 
+  auto buffer_creation_end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> buffer_creation_time = buffer_creation_end - start;
+
+  // Ensure all buffers are created before starting the timing
+  queue.finish();
+
   map_2kernel.setArg(0, buffer_a);
   map_2kernel.setArg(1, buffer_b);
   map_2kernel.setArg(2, buffer_resp);
@@ -172,8 +178,9 @@ int main(int argc, char *argv[])
   printf("Global range: %lu\n", global_range[0]);
   printf("Local range: %lu\n", local_range[0]);
   printf("-------------------------\n");
-  printf("Elapsed time (chrono): %3.5f ms\n", elapsed.count());
-  printf("Elapsed time (profiling): %3.5f ms\n", time);
+  printf("Elapsed time [total] (chrono): %3.5f ms\n", elapsed.count());
+  printf("Elapsed time [kernels + read] (profiling): %3.5f ms\n", time);
+  printf("Buffer creation time (chrono): %3.5f ms\n", buffer_creation_time.count());
 
   free(a);
   free(b);
