@@ -195,6 +195,8 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
+    cudaDeviceSynchronize();
+
     cudaMemcpy(final, d_final, sizeof(float), cudaMemcpyDeviceToHost);
     j_error = cudaGetLastError();
     if (j_error != cudaSuccess)
