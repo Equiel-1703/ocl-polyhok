@@ -85,10 +85,11 @@ int main(int argc, char *argv[])
   cl::Kernel map_2kernel(program, "map_2kernel");
   cl::Kernel reduce_kernel(program, "reduce_kernel");
 
-  float *a, *b, *resp;
+  float *a, *b, *resp, *final;
 
   int N = atoi(argv[1]);
 
+  // Creating and populating host arrays
   a = (float *)malloc(N * sizeof(float));
   b = (float *)malloc(N * sizeof(float));
   resp = (float *)malloc(N * sizeof(float));
@@ -114,9 +115,10 @@ int main(int argc, char *argv[])
     b[tot + i] = (float)n;
   }
 
-  float *final = (float *)malloc(sizeof(float));
+  final = (float *)malloc(sizeof(float));
   final[0] = 0;
 
+  // Defining work group sizes
   int threadsPerBlock = 256;
   int numberOfBlocks = (N + threadsPerBlock - 1) / threadsPerBlock;
 
@@ -124,18 +126,18 @@ int main(int argc, char *argv[])
   cl::NDRange global_range(numberOfBlocks * threadsPerBlock);
   cl::NDRange local_range(threadsPerBlock);
 
-  auto start = std::chrono::high_resolution_clock::now();
+  auto chrono_start = std::chrono::high_resolution_clock::now();
 
-  cl::Buffer buffer_a(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, N * sizeof(float), a);
-  cl::Buffer buffer_b(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, N * sizeof(float), b);
+  // Creating device buffers
+  cl::Buffer buffer_a(context, CL_MEM_READ_ONLY, N * sizeof(float));
+  cl::Buffer buffer_b(context, CL_MEM_READ_ONLY, N * sizeof(float));
   cl::Buffer buffer_resp(context, CL_MEM_READ_WRITE, N * sizeof(float));
-  cl::Buffer d_final(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(float), final);
+  cl::Buffer d_final(context, CL_MEM_READ_WRITE, sizeof(float));
 
-  // Ensure all buffers are created
-  queue.finish();
-
-  auto buffer_creation_end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::milli> buffer_creation_time = buffer_creation_end - start;
+  // Copying data from host to device (H2D), blocking calls
+  queue.enqueueWriteBuffer(buffer_a, CL_TRUE, 0, N * sizeof(float), a);
+  queue.enqueueWriteBuffer(buffer_b, CL_TRUE, 0, N * sizeof(float), b);
+  queue.enqueueWriteBuffer(d_final, CL_TRUE, 0, sizeof(float), final);
 
   // Set kernel arguments
   map_2kernel.setArg(0, buffer_a);
@@ -161,16 +163,16 @@ int main(int argc, char *argv[])
   // Wait for all operations to finish
   queue.finish();
 
-  auto end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::milli> elapsed = end - start;
+  auto chrono_end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> chrono_time = chrono_end - chrono_start;
 
   // Calculate total time using event profiling info
   cl_ulong map_start = map_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
   cl_ulong read_end = read_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
 
-  double time = (read_end - map_start) / 1e6; // Convert to milliseconds
+  double profiling_time = (read_end - map_start) / 1e6; // Calculating profiling time in milliseconds
 
-  printf("OpenCL\t%d\t%3.1f\n", N, time);
+  printf("OpenCL\t%d\t%3.1f\n", N, profiling_time);
   printf("Result: %f\n", final[0]);
   printf("-------------------------\n");
   printf("Threads per block: %d\n", threadsPerBlock);
@@ -179,9 +181,8 @@ int main(int argc, char *argv[])
   printf("Global range: %lu\n", global_range[0]);
   printf("Local range: %lu\n", local_range[0]);
   printf("-------------------------\n");
-  printf("Elapsed time [total] (chrono): %3.5f ms\n", elapsed.count());
-  printf("Elapsed time [kernels + read] (profiling): %3.5f ms\n", time);
-  printf("Buffer creation time (chrono): %3.5f ms\n", buffer_creation_time.count());
+  printf("Elapsed time [total] (chrono): %3.5f ms\n", chrono_time.count());
+  printf("Elapsed time [kernels + read] (profiling): %3.5f ms\n", profiling_time);
 
   free(a);
   free(b);
