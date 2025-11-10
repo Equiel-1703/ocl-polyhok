@@ -227,8 +227,8 @@ int main(int argc, char *argv[])
     printf("Global range: %d\n", threadsPerBlock * numberOfBlocks);
     printf("Local range: %d\n", threadsPerBlock);
     printf("-------------------------\n");
-    printf("Elapsed time (chrono): %3.5f ms\n", time_chrono.count());
-    printf("Elapsed time (CUDA events): %3.5f ms\n", time);
+    printf("Total time (chrono): %3.5f ms\n", time_chrono.count());
+    printf("Total time (CUDA events): %3.5f ms\n", time);
 
     /*
         for(int i=0; i<10; i++) {
