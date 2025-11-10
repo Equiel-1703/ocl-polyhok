@@ -78,10 +78,17 @@ int main(int argc, char *argv[])
   cl::Device device = getDefaultDevice(platform);
   cl::Context context(device);
 
+  // Get platform and device name
+  std::string platform_name = platform.getInfo<CL_PLATFORM_NAME>();
+  std::string device_name = device.getInfo<CL_DEVICE_NAME>();
+
   // Create a queue with profiling enabled, this is needed to measure execution time of kernels
   cl::CommandQueue queue(context, device, CL_QUEUE_PROFILING_ENABLE);
 
-  cl::Program program(context, opencl_kernel_code, true);
+  // Build the program with optimization flags
+  cl::Program program(context, opencl_kernel_code, false);
+  program.build(device, "-cl-fast-relaxed-math -cl-mad-enable -cl-std=CL2.0");
+
   cl::Kernel map_2kernel(program, "map_2kernel");
   cl::Kernel reduce_kernel(program, "reduce_kernel");
 
@@ -177,6 +184,9 @@ int main(int argc, char *argv[])
 
   printf("OpenCL\t%d\t%3.1f\n", N, total_time_profiling);
   printf("Result: %f\n", final[0]);
+  printf("-------------------------\n");
+  printf("Platform: %s\n", platform_name.c_str());
+  printf("Device: %s\n", device_name.c_str());
   printf("-------------------------\n");
   printf("Threads per block: %d\n", threadsPerBlock);
   printf("Number of blocks: %d\n", numberOfBlocks);
