@@ -137,10 +137,10 @@ int main(int argc, char *argv[])
   cl::Buffer buffer_resp(context, CL_MEM_READ_WRITE, N * sizeof(float));
   cl::Buffer d_final(context, CL_MEM_READ_WRITE, sizeof(float));
 
-  // Copying data from host to device (H2D), blocking calls
-  queue.enqueueWriteBuffer(buffer_a, CL_TRUE, 0, N * sizeof(float), a, nullptr, &write_buffers_start_ev);
-  queue.enqueueWriteBuffer(buffer_b, CL_TRUE, 0, N * sizeof(float), b);
-  queue.enqueueWriteBuffer(d_final, CL_TRUE, 0, sizeof(float), final, nullptr, &write_buffers_end_ev);
+  // Copying data from host to device (H2D), non-blocking calls
+  queue.enqueueWriteBuffer(buffer_a, CL_FALSE, 0, N * sizeof(float), a, nullptr, &write_buffers_start_ev);
+  queue.enqueueWriteBuffer(buffer_b, CL_FALSE, 0, N * sizeof(float), b);
+  queue.enqueueWriteBuffer(d_final, CL_FALSE, 0, sizeof(float), final, nullptr, &write_buffers_end_ev);
 
   // Set kernel arguments
   map_2kernel.setArg(0, buffer_a);
@@ -159,9 +159,6 @@ int main(int argc, char *argv[])
 
   // Read back the result
   queue.enqueueReadBuffer(d_final, CL_TRUE, 0, sizeof(float), final, nullptr, &read_buffer_final_ev);
-
-  // Wait for all operations to finish
-  queue.finish();
 
   auto chrono_end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> chrono_time = chrono_end - chrono_start;
