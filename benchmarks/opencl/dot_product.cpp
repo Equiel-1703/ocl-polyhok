@@ -126,6 +126,9 @@ int main(int argc, char *argv[])
   cl::NDRange global_range(numberOfBlocks * threadsPerBlock);
   cl::NDRange local_range(threadsPerBlock);
 
+  // Creating OpenCL events to measure time using profiling info
+  cl::Event write_buffer_a_event, read_final_buffer_event;
+
   auto chrono_start = std::chrono::high_resolution_clock::now();
 
   // Creating device buffers
@@ -135,7 +138,7 @@ int main(int argc, char *argv[])
   cl::Buffer d_final(context, CL_MEM_READ_WRITE, sizeof(float));
 
   // Copying data from host to device (H2D), blocking calls
-  queue.enqueueWriteBuffer(buffer_a, CL_TRUE, 0, N * sizeof(float), a);
+  queue.enqueueWriteBuffer(buffer_a, CL_TRUE, 0, N * sizeof(float), a, nullptr, &write_buffer_a_event);
   queue.enqueueWriteBuffer(buffer_b, CL_TRUE, 0, N * sizeof(float), b);
   queue.enqueueWriteBuffer(d_final, CL_TRUE, 0, sizeof(float), final);
 
@@ -150,15 +153,12 @@ int main(int argc, char *argv[])
   reduce_kernel.setArg(2, 0.0f);
   reduce_kernel.setArg(3, N);
 
-  // Measure execution time of kernels with event profiling
-  cl::Event map_event, reduce_event, read_event;
-
   // Run kernels
-  queue.enqueueNDRangeKernel(map_2kernel, cl::NullRange, global_range, local_range, nullptr, &map_event);
-  queue.enqueueNDRangeKernel(reduce_kernel, cl::NullRange, global_range, local_range, nullptr, &reduce_event);
+  queue.enqueueNDRangeKernel(map_2kernel, cl::NullRange, global_range, local_range);
+  queue.enqueueNDRangeKernel(reduce_kernel, cl::NullRange, global_range, local_range);
 
   // Read back the result
-  queue.enqueueReadBuffer(d_final, CL_TRUE, 0, sizeof(float), final, nullptr, &read_event);
+  queue.enqueueReadBuffer(d_final, CL_TRUE, 0, sizeof(float), final, nullptr, &read_final_buffer_event);
 
   // Wait for all operations to finish
   queue.finish();
@@ -167,10 +167,10 @@ int main(int argc, char *argv[])
   std::chrono::duration<double, std::milli> chrono_time = chrono_end - chrono_start;
 
   // Calculate total time using event profiling info
-  cl_ulong map_start = map_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-  cl_ulong read_end = read_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+  cl_ulong write_buffer_a_start = write_buffer_a_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+  cl_ulong read_final_buffer_end = read_final_buffer_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
 
-  double profiling_time = (read_end - map_start) / 1e6; // Calculating profiling time in milliseconds
+  double profiling_time = (read_final_buffer_end - write_buffer_a_start) / 1e6; // Convert nanoseconds to milliseconds
 
   printf("OpenCL\t%d\t%3.1f\n", N, profiling_time);
   printf("Result: %f\n", final[0]);
@@ -182,7 +182,7 @@ int main(int argc, char *argv[])
   printf("Local range: %lu\n", local_range[0]);
   printf("-------------------------\n");
   printf("Elapsed time [total] (chrono): %3.5f ms\n", chrono_time.count());
-  printf("Elapsed time [kernels + read] (profiling): %3.5f ms\n", profiling_time);
+  printf("Elapsed time [buffer writes + kernels + read] (profiling): %3.5f ms\n", profiling_time);
 
   free(a);
   free(b);
