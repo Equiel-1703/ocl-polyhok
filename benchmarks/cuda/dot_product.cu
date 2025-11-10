@@ -221,6 +221,12 @@ int main(int argc, char *argv[])
     printf("CUDA\t%d\t%3.1f\n", N, time);
     printf("Result: %f\n", final[0]);
     printf("-------------------------\n");
+    printf("Threads per block: %d\n", threadsPerBlock);
+    printf("Number of blocks: %d\n", numberOfBlocks);
+    printf("-------------------------\n");
+    printf("Global range: %d\n", threadsPerBlock * numberOfBlocks);
+    printf("Local range: %d\n", threadsPerBlock);
+    printf("-------------------------\n");
     printf("Elapsed time (chrono): %3.5f ms\n", time_chrono.count());
     printf("Elapsed time (CUDA events): %3.5f ms\n", time);
 
