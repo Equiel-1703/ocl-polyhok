@@ -66,12 +66,12 @@ int main(int argc, char *argv[])
 
     float *a, *b, *resp;
     float *final, *d_final;
-    
+
     float *dev_a, *dev_b, *dev_resp;
     cudaError_t j_error;
-    
+
     int N = atoi(argv[1]);
-    
+
     a = (float *)malloc(N * sizeof(float));
     b = (float *)malloc(N * sizeof(float));
     resp = (float *)malloc(N * sizeof(float));
@@ -203,6 +203,9 @@ int main(int argc, char *argv[])
 
     cudaDeviceSynchronize();
 
+    // Measure kernel execution end time using chrono
+    auto kernel_end = std::chrono::high_resolution_clock::now();
+
     cudaMemcpy(final, d_final, sizeof(float), cudaMemcpyDeviceToHost);
     j_error = cudaGetLastError();
     if (j_error != cudaSuccess)
@@ -211,15 +214,19 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
+    // Measure end time using chrono
+    auto end_chrono = std::chrono::high_resolution_clock::now();
+
     cudaFree(dev_a);
     cudaFree(dev_b);
     cudaFree(dev_resp);
     cudaFree(d_final);
 
-    // Measure time using chrono
-    auto end_chrono = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double, std::milli> time_chrono = end_chrono - start_chrono;
+    // Calculate chrono durations
+    std::chrono::duration<double, std::milli> total_time_chrono = end_chrono - start_chrono;
     std::chrono::duration<double, std::milli> h2d_time = h2d_end - h2d_start;
+    std::chrono::duration<double, std::milli> kernel_time = kernel_end - h2d_end;
+    std::chrono::duration<double, std::milli> d2h_time = end_chrono - kernel_end;
 
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
@@ -234,17 +241,11 @@ int main(int argc, char *argv[])
     printf("Global range: %d\n", threadsPerBlock * numberOfBlocks);
     printf("Local range: %d\n", threadsPerBlock);
     printf("-------------------------\n");
-    printf("Total time (chrono): %3.5f ms\n", time_chrono.count());
+    printf("Total time (chrono): %3.5f ms\n", total_time_chrono.count());
     printf("Total time (CUDA events): %3.5f ms\n", time);
     printf("H2D copy time (chrono): %3.5f ms\n", h2d_time.count());
-
-    /*
-        for(int i=0; i<10; i++) {
-            printf("a[%d] = %f;\n",i,a[i]);
-        }
-    */
-
-    // printf("\n FINAL RESULTADO: %f \n", c);
+    printf("Kernel execution time (chrono): %3.5f ms\n", kernel_time.count());
+    printf("D2H copy time (chrono): %3.5f ms\n", d2h_time.count());
 
     free(a);
     free(b);
