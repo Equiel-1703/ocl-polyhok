@@ -65,14 +65,18 @@ int main(int argc, char *argv[])
 {
 
     float *a, *b, *resp;
+    float *final, *d_final;
+    
     float *dev_a, *dev_b, *dev_resp;
     cudaError_t j_error;
-
+    
     int N = atoi(argv[1]);
-
+    
     a = (float *)malloc(N * sizeof(float));
     b = (float *)malloc(N * sizeof(float));
     resp = (float *)malloc(N * sizeof(float));
+    final = (float *)malloc(sizeof(float));
+    final[0] = 0;
 
     /*
     for(int i=0; i<N/2; i++) {
@@ -146,6 +150,17 @@ int main(int argc, char *argv[])
         printf("Error: %s\n", cudaGetErrorString(j_error));
         exit(1);
     }
+    cudaMalloc((void **)&d_final, sizeof(float));
+    j_error = cudaGetLastError();
+    if (j_error != cudaSuccess)
+    {
+        printf("Error: %s\n", cudaGetErrorString(j_error));
+        exit(1);
+    }
+
+    // Measure H2D copy time using chrono
+    auto h2d_start = std::chrono::high_resolution_clock::now();
+
     cudaMemcpy(dev_a, a, N * sizeof(float), cudaMemcpyHostToDevice);
     j_error = cudaGetLastError();
     if (j_error != cudaSuccess)
@@ -160,17 +175,6 @@ int main(int argc, char *argv[])
         printf("Error: %s\n", cudaGetErrorString(j_error));
         exit(1);
     }
-
-    // float (*f1)(float,float) = (float (*)(float,float)) get_anonymous_mult_ptr();
-    // float (*f2)(float,float) = (float (*)(float,float)) get_anonymous_sum_ptr();
-
-    float *final, *d_final;
-    final = (float *)malloc(sizeof(float));
-
-    final[0] = 0;
-
-    cudaMalloc((void **)&d_final, sizeof(float));
-
     cudaMemcpy(d_final, final, sizeof(float), cudaMemcpyHostToDevice);
     j_error = cudaGetLastError();
     if (j_error != cudaSuccess)
@@ -178,6 +182,8 @@ int main(int argc, char *argv[])
         printf("Error: %s\n", cudaGetErrorString(j_error));
         exit(1);
     }
+
+    auto h2d_end = std::chrono::high_resolution_clock::now();
 
     map_2kernel<<<numberOfBlocks, threadsPerBlock>>>(dev_a, dev_b, dev_resp, N);
     j_error = cudaGetLastError();
@@ -213,6 +219,7 @@ int main(int argc, char *argv[])
     // Measure time using chrono
     auto end_chrono = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> time_chrono = end_chrono - start_chrono;
+    std::chrono::duration<double, std::milli> h2d_time = h2d_end - h2d_start;
 
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
@@ -229,6 +236,7 @@ int main(int argc, char *argv[])
     printf("-------------------------\n");
     printf("Total time (chrono): %3.5f ms\n", time_chrono.count());
     printf("Total time (CUDA events): %3.5f ms\n", time);
+    printf("H2D copy time (chrono): %3.5f ms\n", h2d_time.count());
 
     /*
         for(int i=0; i<10; i++) {
