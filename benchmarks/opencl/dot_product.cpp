@@ -176,6 +176,7 @@ int main(int argc, char *argv[])
   double total_time_profiling = (read_buffer_final_end - write_buffers_start) / 1e6;
   double write_buffers_time_profiling = (write_buffers_end - write_buffers_start) / 1e6;
   double kernel_execution_time_profiling = (read_buffer_final_start - write_buffers_end) / 1e6;
+  double read_buffer_time_profiling = (read_buffer_final_end - read_buffer_final_start) / 1e6;
 
   printf("OpenCL\t%d\t%3.1f\n", N, total_time_profiling);
   printf("Result: %f\n", final[0]);
@@ -190,6 +191,7 @@ int main(int argc, char *argv[])
   printf("Total time (profiling): %3.5f ms\n", total_time_profiling);
   printf("Write buffers time (profiling): %3.5f ms\n", write_buffers_time_profiling);
   printf("Kernel execution time (profiling): %3.5f ms\n", kernel_execution_time_profiling);
+  printf("Read buffer time (profiling): %3.5f ms\n", read_buffer_time_profiling);
 
   free(a);
   free(b);
