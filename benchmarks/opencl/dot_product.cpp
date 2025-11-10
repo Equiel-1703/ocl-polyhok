@@ -86,8 +86,11 @@ int main(int argc, char *argv[])
   cl::CommandQueue queue(context, device, CL_QUEUE_PROFILING_ENABLE);
 
   // Build the program with optimization flags
-  cl::Program program(context, opencl_kernel_code, false);
+  cl::Program program(context, opencl_kernel_code);
   program.build(device, "-cl-fast-relaxed-math -cl-mad-enable -cl-std=CL2.0");
+
+  // Get build log
+  std::string log = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device);
 
   cl::Kernel map_2kernel(program, "map_2kernel");
   cl::Kernel reduce_kernel(program, "reduce_kernel");
@@ -199,6 +202,8 @@ int main(int argc, char *argv[])
   printf("Write buffers time (profiling): %3.5f ms\n", write_buffers_time_profiling);
   printf("Kernel execution time (profiling): %3.5f ms\n", kernel_execution_time_profiling);
   printf("Read buffer time (profiling): %3.5f ms\n", read_buffer_time_profiling);
+  printf("-------------------------\n");
+  printf("Build Log:\n%s\n", log.c_str());
 
   free(a);
   free(b);
