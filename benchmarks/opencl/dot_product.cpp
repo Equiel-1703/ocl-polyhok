@@ -87,10 +87,23 @@ int main(int argc, char *argv[])
 
   // Build the program with optimization flags
   cl::Program program(context, opencl_kernel_code);
-  program.build(device, "-cl-fast-relaxed-math -cl-mad-enable -cl-std=CL2.0");
 
-  // Get build log
-  std::string log = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device);
+  std::string build_options = "-cl-fast-relaxed-math -cl-mad-enable";
+
+  try
+  {
+    program.build(build_options.c_str());
+  }
+  catch (cl::BuildError &e)
+  {
+    std::cerr << "OpenCL build failed!" << std::endl;
+    std::cerr << "Build Log:" << std::endl;
+    for (const auto &err : e.getBuildLog())
+    {
+      std::cerr << err.second << std::endl;
+    }
+    return 1; // Exit if the kernel can't be built
+  }
 
   cl::Kernel map_2kernel(program, "map_2kernel");
   cl::Kernel reduce_kernel(program, "reduce_kernel");
@@ -202,8 +215,6 @@ int main(int argc, char *argv[])
   printf("Write buffers time (profiling): %3.5f ms\n", write_buffers_time_profiling);
   printf("Kernel execution time (profiling): %3.5f ms\n", kernel_execution_time_profiling);
   printf("Read buffer time (profiling): %3.5f ms\n", read_buffer_time_profiling);
-  printf("-------------------------\n");
-  printf("Build Log:\n%s\n", log.c_str());
 
   free(a);
   free(b);
