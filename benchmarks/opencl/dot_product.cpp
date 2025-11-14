@@ -88,7 +88,8 @@ int main(int argc, char *argv[])
   // Build the program with optimization flags
   cl::Program program(context, opencl_kernel_code);
 
-  std::string build_options = "-cl-fast-relaxed-math -cl-mad-enable";
+  // std::string build_options = "-w -cl-fast-relaxed-math -cl-mad-enable";
+  std::string build_options = "-w";
 
   try
   {
