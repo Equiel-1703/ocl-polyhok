@@ -323,6 +323,7 @@ void OCLInterface::readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t s
 
 void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset) const
 {
+    // This function could be non-blocking in the future...
     this->command_queue.enqueueWriteBuffer(buffer, CL_TRUE, offset, size, host_ptr);
 }
 

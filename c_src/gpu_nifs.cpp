@@ -6,22 +6,22 @@
 
 #include <cmath>
 #include <cstdint>
-#include <dlfcn.h>
-#include <assert.h>
-
+#include <cstring>
 #include <chrono>
 
 bool debug_logs = false;
 bool fp64_supported = false;
 bool int64_base_atomics_supported = false;
 
+// Destructor for device array resource (cl::Buffer)
 void dev_array_destructor(ErlNifEnv * /* env */, void *res)
 {
   cl::Buffer *dev_array = (cl::Buffer *)res;
 
-  // Explicitly call the destructor for the cl::Buffer object
-  // without deallocating the resource memory itself. This is
-  // Erlang's garbage collector responsibility.
+  // Explicitly call the destructor for the cl::Buffer object without deallocating
+  // the resource memory itself (the memory where the pointer to cl::Buffer is stored).
+  // This is Erlang's garbage collector responsibility, and if we do this we'll get a
+  // deallocation error.
   dev_array->~Buffer();
 
   if (debug_logs)
@@ -32,8 +32,11 @@ void dev_array_destructor(ErlNifEnv * /* env */, void *res)
 
 OCLInterface *open_cl = nullptr;
 
+// Global resource type for GPU arrays (cl::Buffer objects)
 ErlNifResourceType *ARRAY_TYPE;
 
+// This function initializes the OpenCL interface, selects the default platform, GPU device,
+// and checks for required extension support.
 void init_ocl(ErlNifEnv *env)
 {
   if (open_cl != nullptr)
@@ -69,6 +72,7 @@ void init_ocl(ErlNifEnv *env)
     // If both extensions are supported, then this device can handle the double type
     if (fp64_supported && int64_base_atomics_supported)
     {
+      // Define flag for double support in OpenCL build options
       open_cl->setBuildOptions("-D DOUBLE_SUPPORTED=1");
     }
 
@@ -84,9 +88,10 @@ void init_ocl(ErlNifEnv *env)
   }
 }
 
-static int
-load(ErlNifEnv *env, void ** /* priv_data */, ERL_NIF_TERM /* load_info */)
+// This function is called when the NIF library is loaded
+static int load(ErlNifEnv *env, void ** /* priv_data */, ERL_NIF_TERM /* load_info */)
 {
+  // Defines the resource type for GPU arrays (Buffer objects in our case)
   ARRAY_TYPE = enif_open_resource_type(
       env,
       NULL,
@@ -95,14 +100,14 @@ load(ErlNifEnv *env, void ** /* priv_data */, ERL_NIF_TERM /* load_info */)
       ERL_NIF_RT_CREATE,
       NULL);
 
-  // Initialize OpenCL
+  // Initialize OpenCL interface
   init_ocl(env);
 
   return 0;
 }
 
-static void
-unload(ErlNifEnv * /* env */, void * /* priv_data */)
+// This function is called when the NIF library is unloaded
+static void unload(ErlNifEnv * /* env */, void * /* priv_data */)
 {
   if (open_cl != nullptr)
   {
@@ -340,16 +345,13 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   size_t data_size;
   char type_name[1024];
 
-  cl::Buffer dev_array;
-  cl::Buffer *array_res = nullptr;
-
+  cl::Buffer *device_array = nullptr;
+  
   // Get the Buffer resource to copy data from
-  if (!enif_get_resource(env, argv[0], ARRAY_TYPE, (void **)&array_res))
+  if (!enif_get_resource(env, argv[0], ARRAY_TYPE, (void **)&device_array))
   {
     return enif_make_badarg(env);
   }
-
-  dev_array = *array_res;
 
   // Get number of rows
   if (!enif_get_int(env, argv[1], &nrow))
@@ -394,17 +396,8 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
     return enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
   }
 
-  // Final term to return to Erlang VM
-  ERL_NIF_TERM erl_term_result;
-
-  // Measure time to allocate host memory
-  auto start_alloc = std::chrono::high_resolution_clock::now();
-
-#ifndef OLD_BACKEND
-  // Allocate memory in host for the result
-  // According to Erlang's docs, for LARGE binaries, it is recommended to use
-  // enif_alloc_binary.
-
+  // Allocate memory in the host to store the result
+  // According to Erlang's docs, for LARGE binaries, it is better to use enif_alloc_binary.
   ErlNifBinary host_bin;
 
   if (!enif_alloc_binary(data_size, &host_bin))
@@ -415,39 +408,13 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
     return enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
   }
 
-  // Getting pointer to the allocated binary data
-  void *host_result_data = (void *)host_bin.data;
-#else
-  // According to Erlang's docs, the function enif_make_new_binary is used to
-  // create SMALL binaries in the BEAM heap. For LARGE binaries, it is recommended to use
-  // enif_alloc_binary and enif_release_binary...
-
-  // However, I'm not really sure what is considered SMALL or LARGE here, neither
-  // if that is true or not.
-
-  void *host_result_data = (void *)enif_make_new_binary(env, data_size, &erl_term_result);
-#endif
-
-  // Finish measuring time to allocate host memory
-
-  auto end_alloc = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::milli> alloc_duration = end_alloc - start_alloc;
-
-  std::cout << "[C++ GPU NIF] Host memory allocation took " << alloc_duration.count() << " ms." << std::endl;
-
-#ifndef OLD_BACKEND
-  std::cout << "[C++ GPU NIF] Used NEW BACKEND." << std::endl;
-#else
-  std::cout << "[C++ GPU NIF] Used OLD BACKEND." << std::endl;
-#endif
-
-  // Measure time to copy data from device to host
-  auto start_copy = std::chrono::high_resolution_clock::now();
+  // Getting pointer to the allocated binary data in the host
+  void *result_data_pointer = (void *)host_bin.data;
 
   // Copying data from device to host
   try
   {
-    open_cl->readBuffer(dev_array, host_result_data, data_size);
+    open_cl->readBuffer(*device_array, result_data_pointer, data_size);
 
     if (debug_logs)
     {
@@ -460,22 +427,13 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
     return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
 
-  // Finish measuring time to copy data from device to host
-  auto end_copy = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double, std::milli> copy_duration = end_copy - start_copy;
-
-  std::cout << "[C++ GPU NIF] Data transfer from device to host took " << copy_duration.count() << " ms." << std::endl;
-
-#ifndef OLD_BACKEND
-  // Creating the Erlang binary term to return
-  erl_term_result = enif_make_binary(env, &host_bin);
-#endif
-
+  // Creating the Erlang binary term to return (passing ownership to the BEAM)
+  ERL_NIF_TERM erl_term_result = enif_make_binary(env, &host_bin);
   return erl_term_result;
 }
 
 // This function creates a new GPU array with the specified number of rows, columns, and type.
-// It allocates memory on the GPU and copies the data from the host array passed to the device.
+// It allocates memory on the GPU and copies data to it from the host array provided.
 static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
 {
   int nrow, ncol;
@@ -484,7 +442,9 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int /* argc */, cons
 
   // Get the host array binary
   if (!enif_inspect_binary(env, argv[0], &host_array_el))
+  {
     return enif_make_badarg(env);
+  }
 
   // Get number of rows
   if (!enif_get_int(env, argv[1], &nrow))
@@ -532,9 +492,10 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int /* argc */, cons
 
   try
   {
-    // Allocate memory on the GPU and copy the data from the host array
-    // Note: The host_array_el.data is a pointer to the data in the Erlang binary
-    cl::Buffer dev_array = open_cl->createBuffer(data_size, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, (void *)host_array_el.data);
+    // Allocate an empty buffer on the GPU for the array
+    cl::Buffer dev_array = open_cl->createBuffer(data_size, CL_MEM_READ_WRITE);
+    // Copy data from host to device (H2D copy)
+    open_cl->writeBuffer(dev_array, (void *)host_array_el.data, data_size);
 
     // Allocate an Erlang resource to hold the C++ buffer object
     cl::Buffer *gpu_res = (cl::Buffer *)enif_alloc_resource(ARRAY_TYPE, sizeof(cl::Buffer));
