@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
   // Create a queue with profiling enabled, this is needed to measure execution time of kernels
   cl::CommandQueue queue(context, device, CL_QUEUE_PROFILING_ENABLE);
 
-  // Build the program with optimization flags
+  // Create Program object from kernel source code
   cl::Program program(context, opencl_kernel_code);
 
   // std::string build_options = "-w -cl-fast-relaxed-math -cl-mad-enable";
