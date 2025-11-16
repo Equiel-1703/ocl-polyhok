@@ -63,7 +63,7 @@ prev = System.monotonic_time()
 
 _result =
   OCLPolyHok.gpufor x <- 0..m, y <- 0..m, mat1, mat2, m do
-    sum = 0
+    sum = 0.0 # Fix: this must start with 0.0 to be identified as float, otherwise results are truncated
 
     for i in range(0, m, 1) do
       sum = sum + mat1[x * m + i] * mat2[i * m + y]
