@@ -7,7 +7,8 @@ void cpu_mm(float *h_a, float *h_b, float *h_result, int m, int n, int k)
     {
         for (int j = 0; j < k; ++j)
         {
-            int tmp = 0.0;
+            // Fix: this was an int started at 0, I replaced it with float started at 0.0
+            float tmp = 0.0;
             for (int h = 0; h < n; ++h)
             {
                 tmp += h_a[i * n + h] * h_b[h * k + j];
@@ -32,7 +33,8 @@ void checkElementsAre(float *gpu, float *cpu, int N)
 
 __device__ float anon_ajh07a72e0(float *mat1, float *mat2, int m, int x, int y)
 {
-    int sum = 0;
+    // Fix: this was an int started at 0, I replaced it with float started at 0.0
+    float sum = 0.0;
     for (int i = 0; i < m; i += 1)
     {
         sum = (sum + (mat1[((x * m) + i)] * mat2[((i * m) + y)]));
@@ -80,12 +82,13 @@ int main(int argc, char const *argv[])
     }
     */
 
-    for (int i = 1; i <= m * m; ++i)
+    // Fix: indexes were going out of bounds and starting at 1 instead of 0
+    for (int i = 0; i < m * m; ++i)
     {
         a[i] = rand() % 1000;
     }
 
-    for (int i = 1; i <= m * m; ++i)
+    for (int i = 0; i < m * m; ++i)
     {
         b[i] = rand() % 1000;
     }
