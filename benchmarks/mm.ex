@@ -1,6 +1,6 @@
 require OCLPolyHok
 
-# OCLPolyHok.set_debug_logs(true)
+OCLPolyHok.set_debug_logs(true)
 
 OCLPolyHok.defmodule MM do
   defk map2xy2D_kernel(arr1, arr2, par, resp, size, f) do
@@ -50,18 +50,18 @@ m = String.to_integer(arg)
 # mat1 = Matrex.new(1, m*m, fn -> :rand.uniform(1000) end)
 # mat2 = Matrex.new(1, m*m, fn -> :rand.uniform(1000) end)
 
-# mat1 = OCLPolyHok.new_nx_from_function(m,m,{:f,32},fn -> :rand.uniform(1000) end )
-# mat2 = OCLPolyHok.new_nx_from_function(m,m,{:f,32},fn -> :rand.uniform(1000) end)
-
 prev = System.monotonic_time()
 
-mat1 = Nx.tensor(Enum.to_list(1..(m * m)), type: :f32)
-mat2 = Nx.tensor(Enum.to_list(1..(m * m)), type: :f32)
+mat1 = OCLPolyHok.new_nx_from_function(m, m, {:f,32}, fn -> :rand.uniform(1000) end)
+mat2 = OCLPolyHok.new_nx_from_function(m, m, {:f,32}, fn -> :rand.uniform(1000) end)
 
-tensors_finish = System.monotonic_time()
+# mat1 = Nx.tensor(Enum.to_list(1..(m * m)), type: :f32)
+# mat2 = Nx.tensor(Enum.to_list(1..(m * m)), type: :f32)
 
-mat1 = Nx.reshape(mat1, {m, m})
-mat2 = Nx.reshape(mat2, {m, m})
+# tensors_finish = System.monotonic_time()
+
+# mat1 = Nx.reshape(mat1, {m, m})
+# mat2 = Nx.reshape(mat2, {m, m})
 
 kernel_start = System.monotonic_time()
 
@@ -80,8 +80,8 @@ _result =
 
 kernel_end = System.monotonic_time()
 
-IO.puts("Kernel time: #{System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)} ms")
 IO.puts("Tensors creation time: #{System.convert_time_unit(tensors_finish - prev, :native, :millisecond)} ms")
+IO.puts("Kernel time: #{System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)} ms")
 IO.puts("Reshape time: #{System.convert_time_unit(kernel_start - tensors_finish, :native, :millisecond)} ms")
 IO.puts("Total time: #{System.convert_time_unit(kernel_end - prev, :native, :millisecond)} ms")
 
