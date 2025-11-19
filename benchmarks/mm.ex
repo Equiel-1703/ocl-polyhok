@@ -53,13 +53,17 @@ m = String.to_integer(arg)
 # mat1 = OCLPolyHok.new_nx_from_function(m,m,{:f,32},fn -> :rand.uniform(1000) end )
 # mat2 = OCLPolyHok.new_nx_from_function(m,m,{:f,32},fn -> :rand.uniform(1000) end)
 
+prev = System.monotonic_time()
+
 mat1 = Nx.tensor(Enum.to_list(1..(m * m)), type: :f32)
 mat2 = Nx.tensor(Enum.to_list(1..(m * m)), type: :f32)
+
+tensors_finish = System.monotonic_time()
 
 mat1 = Nx.reshape(mat1, {m, m})
 mat2 = Nx.reshape(mat2, {m, m})
 
-prev = System.monotonic_time()
+kernel_start = System.monotonic_time()
 
 _result =
   OCLPolyHok.gpufor x <- 0..m, y <- 0..m, mat1, mat2, m do
@@ -74,9 +78,12 @@ _result =
 
 # comp mat1 mat2 m m m(fun mat1 mat2 m x y)
 
-next = System.monotonic_time()
+kernel_end = System.monotonic_time()
 
-IO.puts("OCLPolyHok\t#{m}\t#{System.convert_time_unit(next - prev, :native, :millisecond)} ")
+IO.puts("Kernel time: #{System.convert_time_unit(kernel_start - kernel_start, :native, :millisecond)} ms")
+IO.puts("Tensors creation time: #{System.convert_time_unit(tensors_finish - prev, :native, :millisecond)} ms")
+IO.puts("Reshape time: #{System.convert_time_unit(kernel_start - tensors_finish, :native, :millisecond)} ms")
+IO.puts("Total time: #{System.convert_time_unit(kernel_end - prev, :native, :millisecond)} ms")
 
 # OCLPolyHok.null(mat1)
 # OCLPolyHok.null(mat2)
