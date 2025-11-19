@@ -76,13 +76,11 @@ _result =
     sum
   end
 
-# comp mat1 mat2 m m m(fun mat1 mat2 m x y)
-
 kernel_end = System.monotonic_time()
 
-IO.puts("Tensors creation time: #{System.convert_time_unit(tensors_finish - prev, :native, :millisecond)} ms")
+IO.puts("NX creation time: #{System.convert_time_unit(kernel_start - prev, :native, :millisecond)} ms")
 IO.puts("Kernel time: #{System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)} ms")
-IO.puts("Reshape time: #{System.convert_time_unit(kernel_start - tensors_finish, :native, :millisecond)} ms")
+# IO.puts("Reshape time: #{System.convert_time_unit(kernel_start - tensors_finish, :native, :millisecond)} ms")
 IO.puts("Total time: #{System.convert_time_unit(kernel_end - prev, :native, :millisecond)} ms")
 
 # OCLPolyHok.null(mat1)
