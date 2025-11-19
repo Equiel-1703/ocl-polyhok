@@ -80,7 +80,7 @@ _result =
 
 kernel_end = System.monotonic_time()
 
-IO.puts("Kernel time: #{System.convert_time_unit(kernel_start - kernel_start, :native, :millisecond)} ms")
+IO.puts("Kernel time: #{System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)} ms")
 IO.puts("Tensors creation time: #{System.convert_time_unit(tensors_finish - prev, :native, :millisecond)} ms")
 IO.puts("Reshape time: #{System.convert_time_unit(kernel_start - tensors_finish, :native, :millisecond)} ms")
 IO.puts("Total time: #{System.convert_time_unit(kernel_end - prev, :native, :millisecond)} ms")
