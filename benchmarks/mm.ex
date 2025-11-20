@@ -53,9 +53,13 @@ defmodule CheckMM do
         expected_val =
           Enum.zip(row_mat1, col_mat2) |> Enum.map(fn {a, b} -> a * b end) |> Enum.sum()
 
+        # Get computed value from result
+        computed_val = Nx.to_number(result[x_idx][y_idx])
+
         IO.puts("* Position (#{x_idx}, #{y_idx}):")
         IO.puts("  - Expected value: #{expected_val}")
-        IO.puts("  - GPU computed value: #{Nx.to_number(result[x_idx][y_idx])}")
+        IO.puts("  - GPU computed value: #{computed_val}")
+        IO.puts("  - Diff: #{abs(expected_val - computed_val)}\n")
       end
     )
   end
