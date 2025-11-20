@@ -37,37 +37,55 @@ OCLPolyHok.defmodule MM do
   end
 end
 
-[arg] = System.argv()
+defmodule CheckMM do
+  def check_spots(num_spots, m, mat1, mat2, result) do
+    indexes = List.duplicate({:rand.uniform(m) - 1, :rand.uniform(m) - 1}, num_spots)
+
+    Enum.each(
+      indexes,
+      fn {x_idx, y_idx} ->
+        # Get row x_idx from mat1
+        row_mat1 = Enum.map(0..(m - 1), fn col -> Nx.to_number(mat1[x_idx][col]) end)
+        # Get column y_idx from mat2
+        col_mat2 = Enum.map(0..(m - 1), fn row -> Nx.to_number(mat2[row][y_idx]) end)
+
+        # Multiply every element in row_mat1 with every element in col_mat2 and sum the results
+        expected_val =
+          Enum.zip(row_mat1, col_mat2) |> Enum.map(fn {a, b} -> a * b end) |> Enum.sum()
+
+        IO.puts("* Position (#{x_idx}, #{y_idx}):")
+        IO.puts("  - Expected value: #{expected_val}")
+        IO.puts("  - GPU computed value: #{Nx.to_number(result[x_idx][y_idx])}")
+      end
+    )
+  end
+end
+
+[arg, num] = System.argv()
 
 m = String.to_integer(arg)
-
-# vet1 = Nx.iota({m,m}, type: :f32)
-# vet2 = Nx.iota({m,m}, type: :f32)
-
-# {mat1,_} = Nx.Random.uniform(Nx.Random.key(1), shape: {m, m}, type: :f32)
-# {mat2,_} = Nx.Random.uniform(Nx.Random.key(1), shape: {m, m}, type: :f32)
-
-# mat1 = Matrex.new(1, m*m, fn -> :rand.uniform(1000) end)
-# mat2 = Matrex.new(1, m*m, fn -> :rand.uniform(1000) end)
+n = String.to_integer(num)
 
 prev = System.monotonic_time()
 
-mat1 = OCLPolyHok.new_nx_from_function(m, m, {:f,32}, fn -> 1.0 end)
-mat2 = OCLPolyHok.new_nx_from_function(m, m, {:f,32}, fn -> 1.0 end)
+mat1 = if(n == 0) do
+  OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
+else
+  Nx.tensor(Enum.to_list(1..(m * m)), type: :f32) |> Nx.reshape({m, m})
+end
 
-# mat1 = Nx.tensor(Enum.to_list(1..(m * m)), type: :f32)
-# mat2 = Nx.tensor(Enum.to_list(1..(m * m)), type: :f32)
-
-# tensors_finish = System.monotonic_time()
-
-# mat1 = Nx.reshape(mat1, {m, m})
-# mat2 = Nx.reshape(mat2, {m, m})
+mat2 = if(n == 0) do
+  OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
+else
+  Nx.tensor(Enum.to_list(1..(m * m)), type: :f32) |> Nx.reshape({m, m})
+end
 
 kernel_start = System.monotonic_time()
 
 result =
   OCLPolyHok.gpufor x <- 0..m, y <- 0..m, mat1, mat2, m do
-    sum = 0.0 # Fix: this must start with 0.0 to be identified as float, otherwise results are truncated
+    # Fix: this must start with 0.0 to be identified as float, otherwise results are truncated
+    sum = 0.0
 
     for i in range(0, m, 1) do
       sum = sum + mat1[x * m + i] * mat2[i * m + y]
@@ -78,18 +96,18 @@ result =
 
 kernel_end = System.monotonic_time()
 
-IO.puts("NX creation time: #{System.convert_time_unit(kernel_start - prev, :native, :millisecond)} ms")
-IO.puts("Kernel time: #{System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)} ms")
+IO.puts(
+  "NX creation time: #{System.convert_time_unit(kernel_start - prev, :native, :millisecond)} ms"
+)
+
+IO.puts(
+  "Kernel time: #{System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)} ms"
+)
+
 # IO.puts("Reshape time: #{System.convert_time_unit(kernel_start - tensors_finish, :native, :millisecond)} ms")
 IO.puts("Total time: #{System.convert_time_unit(kernel_end - prev, :native, :millisecond)} ms")
 
-# Check result
-IO.inspect result
 
-# OCLPolyHok.null(mat1)
-# OCLPolyHok.null(mat2)
-# m1 = Matrex.reshape(mat1,m,m)
-# m2 = Matrex.reshape(mat2,m,m)
-# res_cpu = Matrex.dot(m1,m2)
-# IO.inspect Matrex.sum(res_cpu)
-# IO.inspect Matrex.sum(result)
+IO.puts("Checking 10 random spots in the result matrix...\n")
+
+CheckMM.check_spots(10, m, mat1, mat2, result)
