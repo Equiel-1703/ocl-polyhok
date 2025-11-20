@@ -85,7 +85,7 @@ mat2 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000)
 
 matrices_end = System.monotonic_time()
 
-IO.puts("\nMatrices initialized.\n")
+IO.puts("Matrices initialized.\n")
 IO.inspect(mat1, label: "Matrix 1")
 IO.inspect(mat2, label: "Matrix 2")
 IO.puts("")

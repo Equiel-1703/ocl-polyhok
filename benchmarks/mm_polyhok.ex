@@ -26,7 +26,7 @@ PolyHok.defmodule MM do
   end
 
   def comp2xy2D1p(arr1, arr2, par, size1, size2, f) do
-    result_gpu = PolyHok.new_gnx(size1, size2, PolyHok.get_type(arr1))
+    result_gpu = PolyHok.new_gnx(size1, size2, Nx.type(arr1))
     arr1_gpu = PolyHok.new_gnx(arr1)
     arr2_gpu = PolyHok.new_gnx(arr2)
 
