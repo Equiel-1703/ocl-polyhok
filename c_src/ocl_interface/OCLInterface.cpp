@@ -1,5 +1,7 @@
 #include "OCLInterface.hpp"
 
+#include <chrono> // --- This is temporary, need to remove it later
+
 OCLInterface::OCLInterface() : OCLInterface(false) {}
 
 OCLInterface::OCLInterface(bool enable_debug_logs)
@@ -300,7 +302,12 @@ void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_r
 {
     try
     {
+        auto start_time = std::chrono::high_resolution_clock::now(); // --- This is temporary, need to remove it later
         this->command_queue.enqueueNDRangeKernel(kernel, cl::NullRange, global_range, local_range);
+        this->command_queue.finish(); // This is temporary and needed to correctly measure time, need to remove it later
+        auto end_time = std::chrono::high_resolution_clock::now(); // --- This is temporary, need to remove it later
+        std::chrono::duration<double, std::milli> exec_time = end_time - start_time; // --- This is temporary, need to remove it later
+        std::cout << "[OCL C++ Interface] Kernel execution time: " << exec_time.count() << " ms" << std::endl; // --- This is temporary, need to remove it later
     }
     catch (const cl::Error &err)
     {
@@ -318,13 +325,23 @@ void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_r
 
 void OCLInterface::readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, size_t offset) const
 {
+    auto start_time = std::chrono::high_resolution_clock::now(); // --- This is temporary, need to remove it later
     this->command_queue.enqueueReadBuffer(buffer, CL_TRUE, offset, size, host_ptr);
+    auto end_time = std::chrono::high_resolution_clock::now(); // --- This is temporary, need to remove it later
+    std::chrono::duration<double, std::milli> read_time = end_time - start_time; // --- This is temporary, need to remove it later
+    std::cout << "[OCL C++ Interface] Buffer read time: " << read_time.count() << " ms" << std::endl; // --- This is temporary, need to remove it later
 }
 
 void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset) const
 {
+    auto start_time = std::chrono::high_resolution_clock::now(); // --- This is temporary, need to remove it later
+
     // This function could be non-blocking in the future...
     this->command_queue.enqueueWriteBuffer(buffer, CL_TRUE, offset, size, host_ptr);
+
+    auto end_time = std::chrono::high_resolution_clock::now(); // --- This is temporary, need to remove it later
+    std::chrono::duration<double, std::milli> write_time = end_time - start_time; // --- This is temporary, need to remove it later
+    std::cout << "[OCL C++ Interface] Buffer write time: " << write_time.count() << " ms" << std::endl; // --- This is temporary, need to remove it later
 }
 
 void *OCLInterface::mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_flags flags, size_t size, size_t offset) const
