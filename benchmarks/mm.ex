@@ -84,6 +84,10 @@ else
   Nx.tensor(Enum.to_list(1..(m * m)), type: :f32) |> Nx.reshape({m, m})
 end
 
+IO.puts("\nMatrices initialized.\n")
+IO.inspect(mat1, label: "Matrix 1")
+IO.inspect(mat2, label: "Matrix 2")
+
 kernel_start = System.monotonic_time()
 
 result =
@@ -101,15 +105,14 @@ result =
 kernel_end = System.monotonic_time()
 
 IO.puts(
-  "NX creation time: #{System.convert_time_unit(kernel_start - prev, :native, :millisecond)} ms"
+  "\nNX creation time: #{System.convert_time_unit(kernel_start - prev, :native, :millisecond)} ms"
 )
 
 IO.puts(
   "Kernel time: #{System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)} ms"
 )
 
-# IO.puts("Reshape time: #{System.convert_time_unit(kernel_start - tensors_finish, :native, :millisecond)} ms")
-IO.puts("Total time: #{System.convert_time_unit(kernel_end - prev, :native, :millisecond)} ms")
+IO.puts("Total time: #{System.convert_time_unit(kernel_end - prev, :native, :millisecond)} ms\n")
 
 
 IO.puts("Checking 10 random spots in the result matrix...\n")
