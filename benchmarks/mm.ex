@@ -111,6 +111,11 @@ kernel_time = System.convert_time_unit(kernel_end - kernel_start, :native, :mill
 matrices_time = System.convert_time_unit(matrices_end - start, :native, :millisecond)
 total_time = kernel_time + matrices_time
 
+IO.puts("--- Results Check ---")
+IO.puts("Checking 10 random spots in the result matrix.\n")
+
+CheckMM.check_spots(10, m, mat1, mat2, result)
+
 IO.puts(
   "\nNX matrices creation time: #{matrices_time} ms"
 )
@@ -120,8 +125,3 @@ IO.puts(
 IO.puts(
   "Total time: #{total_time} ms\n"
 )
-
-IO.puts("--- Results Check ---")
-IO.puts("Checking 10 random spots in the result matrix.\n")
-
-CheckMM.check_spots(10, m, mat1, mat2, result)
