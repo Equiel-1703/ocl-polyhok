@@ -65,7 +65,16 @@ defmodule CheckMM do
   end
 end
 
-[arg, num] = System.argv()
+try do
+  [arg, num] = System.argv()
+rescue
+  _ ->
+    IO.puts("Usage: mix run benchmarks/mm.ex [MATRIX_SIZE] [0|1]")
+    IO.puts("  MATRIX_SIZE: Size of the square matrices to be multiplied (MxM)")
+    IO.puts("  0: Initialize matrices with random values using OCLPolyHok.new_nx_from_function/4")
+    IO.puts("  1: Initialize matrices with sequential values using Nx.tensor/2 and Enum.to_list/1")
+    System.stop(1)
+end
 
 m = String.to_integer(arg)
 n = String.to_integer(num)
