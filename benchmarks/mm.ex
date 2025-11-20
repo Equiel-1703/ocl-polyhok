@@ -65,45 +65,23 @@ defmodule CheckMM do
   end
 end
 
-{size, mode} =
+size =
   try do
-    [size, mode] = System.argv()
-    {size, mode}
+    [size] = System.argv()
+    size
   rescue
     _ ->
-      IO.puts("Usage: mix run benchmarks/mm.ex [MATRIX_SIZE] [0|1]")
-
-      IO.puts("  MATRIX_SIZE: Size of the square matrices to be multiplied (MxM)")
-
-      IO.puts(
-        "  0: Initialize matrices with random values using OCLPolyHok.new_nx_from_function/4"
-      )
-
-      IO.puts(
-        "  1: Initialize matrices with sequential values using Nx.tensor/2 and Enum.to_list/1"
-      )
-
+      IO.puts("Usage: mix run benchmarks/mm.ex [MATRIX_SIZE]")
+      IO.puts("  - MATRIX_SIZE: Size of the square matrices to be multiplied (MxM)")
       System.halt(0)
   end
 
 m = String.to_integer(size)
-n = String.to_integer(mode)
 
 start = System.monotonic_time()
 
-mat1 =
-  if(n == 0) do
-    OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
-  else
-    Nx.tensor(Enum.to_list(1..(m * m)), type: :f32) |> Nx.reshape({m, m})
-  end
-
-mat2 =
-  if(n == 0) do
-    OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
-  else
-    Nx.tensor(Enum.to_list(1..(m * m)), type: :f32) |> Nx.reshape({m, m})
-  end
+mat1 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
+mat2 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
 
 matrices_end = System.monotonic_time()
 
@@ -128,20 +106,22 @@ result =
 
 kernel_end = System.monotonic_time()
 
+# Calculate times in milliseconds
 kernel_time = System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)
 matrices_time = System.convert_time_unit(matrices_end - start, :native, :millisecond)
 total_time = kernel_time + matrices_time
 
 IO.puts(
-  "\nNX creation time: #{matrices_time} ms"
+  "\nNX matrices creation time: #{matrices_time} ms"
 )
-
 IO.puts(
   "Kernel time: #{kernel_time} ms"
 )
+IO.puts(
+  "Total time: #{total_time} ms\n"
+)
 
-IO.puts("Total time: #{total_time} ms\n")
-
-IO.puts("Checking 10 random spots in the result matrix...\n")
+IO.puts("--- Results Check ---")
+IO.puts("Checking 10 random spots in the result matrix.\n")
 
 CheckMM.check_spots(10, m, mat1, mat2, result)
