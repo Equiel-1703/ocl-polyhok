@@ -52,8 +52,8 @@ m = String.to_integer(arg)
 
 prev = System.monotonic_time()
 
-mat1 = OCLPolyHok.new_nx_from_function(m, m, {:f,32}, fn -> :rand.uniform(1000) end)
-mat2 = OCLPolyHok.new_nx_from_function(m, m, {:f,32}, fn -> :rand.uniform(1000) end)
+mat1 = OCLPolyHok.new_nx_from_function(m, m, {:f,32}, fn -> 1.0 end)
+mat2 = OCLPolyHok.new_nx_from_function(m, m, {:f,32}, fn -> 1.0 end)
 
 # mat1 = Nx.tensor(Enum.to_list(1..(m * m)), type: :f32)
 # mat2 = Nx.tensor(Enum.to_list(1..(m * m)), type: :f32)
@@ -65,7 +65,7 @@ mat2 = OCLPolyHok.new_nx_from_function(m, m, {:f,32}, fn -> :rand.uniform(1000) 
 
 kernel_start = System.monotonic_time()
 
-_result =
+result =
   OCLPolyHok.gpufor x <- 0..m, y <- 0..m, mat1, mat2, m do
     sum = 0.0 # Fix: this must start with 0.0 to be identified as float, otherwise results are truncated
 
@@ -82,6 +82,9 @@ IO.puts("NX creation time: #{System.convert_time_unit(kernel_start - prev, :nati
 IO.puts("Kernel time: #{System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)} ms")
 # IO.puts("Reshape time: #{System.convert_time_unit(kernel_start - tensors_finish, :native, :millisecond)} ms")
 IO.puts("Total time: #{System.convert_time_unit(kernel_end - prev, :native, :millisecond)} ms")
+
+# Check first few elements
+IO.inspect Enum.slice(result, 0, 10)
 
 # OCLPolyHok.null(mat1)
 # OCLPolyHok.null(mat2)
