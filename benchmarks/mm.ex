@@ -65,8 +65,9 @@ defmodule CheckMM do
   end
 end
 
-try do
+[m, mode] = try do
   [arg, num] = System.argv()
+  [arg, num]
 rescue
   _ ->
     IO.puts("Usage: mix run benchmarks/mm.ex [MATRIX_SIZE] [0|1]")
@@ -76,8 +77,8 @@ rescue
     System.stop(1)
 end
 
-m = String.to_integer(arg)
-n = String.to_integer(num)
+m = String.to_integer(m)
+n = String.to_integer(mode)
 
 prev = System.monotonic_time()
 
