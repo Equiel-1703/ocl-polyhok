@@ -115,7 +115,7 @@ IO.puts(
   "\nNX matrices creation time: #{matrices_time} ms"
 )
 IO.puts(
-  "Kernel time: #{kernel_time} ms"
+  "Kernel time (from Elixir perspective): #{kernel_time} ms"
 )
 IO.puts(
   "Total time: #{total_time} ms\n"
