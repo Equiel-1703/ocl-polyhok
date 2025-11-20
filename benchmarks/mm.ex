@@ -65,38 +65,52 @@ defmodule CheckMM do
   end
 end
 
-[m, mode] = try do
-  [arg, num] = System.argv()
-  [arg, num]
-rescue
-  _ ->
-    IO.puts("Usage: mix run benchmarks/mm.ex [MATRIX_SIZE] [0|1]")
-    IO.puts("  MATRIX_SIZE: Size of the square matrices to be multiplied (MxM)")
-    IO.puts("  0: Initialize matrices with random values using OCLPolyHok.new_nx_from_function/4")
-    IO.puts("  1: Initialize matrices with sequential values using Nx.tensor/2 and Enum.to_list/1")
-    System.halt(0)
-end
+{size, mode} =
+  try do
+    [size, mode] = System.argv()
+    {size, mode}
+  rescue
+    _ ->
+      IO.puts("Usage: mix run benchmarks/mm.ex [MATRIX_SIZE] [0|1]")
 
-m = String.to_integer(m)
+      IO.puts("  MATRIX_SIZE: Size of the square matrices to be multiplied (MxM)")
+
+      IO.puts(
+        "  0: Initialize matrices with random values using OCLPolyHok.new_nx_from_function/4"
+      )
+
+      IO.puts(
+        "  1: Initialize matrices with sequential values using Nx.tensor/2 and Enum.to_list/1"
+      )
+
+      System.halt(0)
+  end
+
+m = String.to_integer(size)
 n = String.to_integer(mode)
 
-prev = System.monotonic_time()
+start = System.monotonic_time()
 
-mat1 = if(n == 0) do
-  OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
-else
-  Nx.tensor(Enum.to_list(1..(m * m)), type: :f32) |> Nx.reshape({m, m})
-end
+mat1 =
+  if(n == 0) do
+    OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
+  else
+    Nx.tensor(Enum.to_list(1..(m * m)), type: :f32) |> Nx.reshape({m, m})
+  end
 
-mat2 = if(n == 0) do
-  OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
-else
-  Nx.tensor(Enum.to_list(1..(m * m)), type: :f32) |> Nx.reshape({m, m})
-end
+mat2 =
+  if(n == 0) do
+    OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
+  else
+    Nx.tensor(Enum.to_list(1..(m * m)), type: :f32) |> Nx.reshape({m, m})
+  end
+
+matrices_end = System.monotonic_time()
 
 IO.puts("\nMatrices initialized.\n")
 IO.inspect(mat1, label: "Matrix 1")
 IO.inspect(mat2, label: "Matrix 2")
+IO.puts("")
 
 kernel_start = System.monotonic_time()
 
@@ -114,16 +128,19 @@ result =
 
 kernel_end = System.monotonic_time()
 
+kernel_time = System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)
+matrices_time = System.convert_time_unit(matrices_end - start, :native, :millisecond)
+total_time = kernel_time + matrices_time
+
 IO.puts(
-  "\nNX creation time: #{System.convert_time_unit(kernel_start - prev, :native, :millisecond)} ms"
+  "\nNX creation time: #{matrices_time} ms"
 )
 
 IO.puts(
-  "Kernel time: #{System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)} ms"
+  "Kernel time: #{kernel_time} ms"
 )
 
-IO.puts("Total time: #{System.convert_time_unit(kernel_end - prev, :native, :millisecond)} ms\n")
-
+IO.puts("Total time: #{total_time} ms\n")
 
 IO.puts("Checking 10 random spots in the result matrix...\n")
 
