@@ -39,7 +39,7 @@ end
 
 defmodule CheckMM do
   def check_spots(num_spots, m, mat1, mat2, result) do
-    indexes = List.duplicate({:rand.uniform(m) - 1, :rand.uniform(m) - 1}, num_spots)
+    indexes = for _ <- 1..num_spots, do: {:rand.uniform(m) - 1, :rand.uniform(m) - 1}
 
     Enum.each(
       indexes,
