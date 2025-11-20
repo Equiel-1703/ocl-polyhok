@@ -83,8 +83,8 @@ IO.puts("Kernel time: #{System.convert_time_unit(kernel_end - kernel_start, :nat
 # IO.puts("Reshape time: #{System.convert_time_unit(kernel_start - tensors_finish, :native, :millisecond)} ms")
 IO.puts("Total time: #{System.convert_time_unit(kernel_end - prev, :native, :millisecond)} ms")
 
-# Check first few elements
-IO.inspect Enum.slice(result, 0, 10)
+# Check result
+IO.inspect result
 
 # OCLPolyHok.null(mat1)
 # OCLPolyHok.null(mat2)
