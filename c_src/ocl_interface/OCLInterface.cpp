@@ -328,7 +328,7 @@ void OCLInterface::readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t s
     
     auto end_time = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> read_duration = end_time - start_time;
-    printf("[OCL C++ Interface] ReadBuffer (Device-to-Host) took %.3f ms\n", read_duration.count());
+    printf("[OCL C++ Interface] ReadBuffer (Device-to-Host) took %.3f ms | size: %zu bytes\n", read_duration.count(), size);
 }
 
 void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset) const
@@ -341,7 +341,7 @@ void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, s
 
     auto end_time = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> write_duration = end_time - start_time;
-    printf("[OCL C++ Interface] WriteBuffer (Host-to-Device) took %.3f ms\n", write_duration.count());
+    printf("[OCL C++ Interface] WriteBuffer (Host-to-Device) took %.3f ms | size: %zu bytes\n", write_duration.count(), size);
 }
 
 void *OCLInterface::mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_flags flags, size_t size, size_t offset) const
