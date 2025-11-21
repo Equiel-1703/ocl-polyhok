@@ -106,6 +106,8 @@ result =
 
 kernel_end = System.monotonic_time()
 
+IO.puts("Kernel ended in Elixir perspective. Time stamp already taken.\n")
+
 # Calculate times in milliseconds
 kernel_time = System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)
 matrices_time = System.convert_time_unit(matrices_end - start, :native, :millisecond)
