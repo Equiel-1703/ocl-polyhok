@@ -1,5 +1,8 @@
 #include "OCLInterface.hpp"
 
+// temp
+#include <chrono>
+
 OCLInterface::OCLInterface() : OCLInterface(false) {}
 
 OCLInterface::OCLInterface(bool enable_debug_logs)
@@ -318,7 +321,12 @@ void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_r
 
 void OCLInterface::readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, size_t offset) const
 {
+    // Temporary timing for performance analysis
+    auto start_time = std::chrono::high_resolution_clock::now();
     this->command_queue.enqueueReadBuffer(buffer, CL_TRUE, offset, size, host_ptr);
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> read_duration = end_time - start_time;
+    printf("[OCL C++ Interface] ReadBuffer completed in %.3f ms\n", read_duration.count());
 }
 
 void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset) const
