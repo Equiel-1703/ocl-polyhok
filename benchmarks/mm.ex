@@ -80,11 +80,8 @@ m = String.to_integer(size)
 
 start = System.monotonic_time()
 
-# mat1 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
-# mat2 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
-
-mat1 = Nx.tensor(Enum.to_list(1..(m*m)), type: :f32) |> Nx.reshape({m, m})
-mat2 = Nx.tensor(Enum.to_list(1..(m*m)), type: :f32) |> Nx.reshape({m, m})
+mat1 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
+mat2 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
 
 matrices_end = System.monotonic_time()
 
