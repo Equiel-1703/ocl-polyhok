@@ -323,16 +323,25 @@ void OCLInterface::readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t s
 {
     // Temporary timing for performance analysis
     auto start_time = std::chrono::high_resolution_clock::now();
+
     this->command_queue.enqueueReadBuffer(buffer, CL_TRUE, offset, size, host_ptr);
+    
     auto end_time = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> read_duration = end_time - start_time;
-    printf("[OCL C++ Interface] ReadBuffer completed in %.3f ms\n", read_duration.count());
+    printf("[OCL C++ Interface] ReadBuffer (Device-to-Host) took %.3f ms\n", read_duration.count());
 }
 
 void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset) const
 {
+    // Temporary timing for performance analysis
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     // This function could be non-blocking in the future...
     this->command_queue.enqueueWriteBuffer(buffer, CL_TRUE, offset, size, host_ptr);
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> write_duration = end_time - start_time;
+    printf("[OCL C++ Interface] WriteBuffer (Host-to-Device) took %.3f ms\n", write_duration.count());
 }
 
 void *OCLInterface::mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_flags flags, size_t size, size_t offset) const
