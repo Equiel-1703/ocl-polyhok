@@ -85,14 +85,9 @@ m = String.to_integer(size)
 mat1 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
 mat2 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
 
-# Allocate ~500MB of zeros. This consumes any "warm" memory sitting in the allocator.
-# We use bit-syntax <<0 :: size(...)>> which is extremely fast to allocate.
-spacer_size = 500 * 1024 * 1024
-_warm_memory_eater = <<0 :: size(spacer_size)-unit(8)>>
-
 kernel_start = System.monotonic_time()
 
-_result =
+result =
   OCLPolyHok.gpufor x <- 0..m, y <- 0..m, mat1, mat2, m do
     # Fix: this must start with 0.0 to be identified as float, otherwise results are truncated
     sum = 0.0
@@ -109,12 +104,11 @@ kernel_end = System.monotonic_time()
 # Calculate times in milliseconds
 kernel_time = System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)
 
-# f_el_mat1 = Nx.to_number(mat1[0][0])
-# f_el_mat2 = Nx.to_number(mat2[0][0])
-# f_el_res = Nx.to_number(result[0][0])
+# This is done so the VM won't reuse the allocated memory for the matrices,
+# since they are used here for "computation"
+f_el_mat1 = Nx.to_number(mat1[0][0])
+f_el_mat2 = Nx.to_number(mat2[0][0])
+f_el_res = Nx.to_number(result[0][0])
+_blablabla = f_el_mat1 + f_el_mat2 + f_el_res
 
 IO.puts("OCLPolyHok\t#{m}\t#{kernel_time}")
-# IO.puts("  - Sample elements: ")
-# IO.puts("    * mat1[0][0]: #{f_el_mat1}")
-# IO.puts("    * mat2[0][0]: #{f_el_mat2}")
-# IO.puts("    * result[0][0]: #{f_el_res}\n")
