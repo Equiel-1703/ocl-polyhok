@@ -78,17 +78,8 @@ size =
 
 m = String.to_integer(size)
 
-start = System.monotonic_time()
-
 mat1 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
 mat2 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
-
-matrices_end = System.monotonic_time()
-
-IO.puts("Matrices initialized.\n")
-IO.inspect(mat1, label: "Matrix 1")
-IO.inspect(mat2, label: "Matrix 2")
-IO.puts("")
 
 kernel_start = System.monotonic_time()
 
@@ -106,24 +97,15 @@ result =
 
 kernel_end = System.monotonic_time()
 
-IO.puts("Kernel ended in Elixir perspective. Time stamp already taken.\n")
-
 # Calculate times in milliseconds
 kernel_time = System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)
-matrices_time = System.convert_time_unit(matrices_end - start, :native, :millisecond)
-total_time = kernel_time + matrices_time
 
-IO.puts("--- Results Check ---")
-IO.puts("Checking 10 random spots in the result matrix.\n")
+# f_el_mat1 = Nx.to_number(mat1[0][0])
+# f_el_mat2 = Nx.to_number(mat2[0][0])
+# f_el_res = Nx.to_number(result[0][0])
 
-CheckMM.check_spots(10, m, mat1, mat2, result)
-
-IO.puts(
-  "\nNX matrices creation time: #{matrices_time} ms"
-)
-IO.puts(
-  "Kernel time (from Elixir perspective): #{kernel_time} ms"
-)
-IO.puts(
-  "Total time: #{total_time} ms\n"
-)
+IO.puts("OCLPolyHok\t#{m}\t#{kernel_time}")
+# IO.puts("  - Sample elements: ")
+# IO.puts("    * mat1[0][0]: #{f_el_mat1}")
+# IO.puts("    * mat2[0][0]: #{f_el_mat2}")
+# IO.puts("    * result[0][0]: #{f_el_res}\n")

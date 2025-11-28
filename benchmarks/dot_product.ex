@@ -137,40 +137,14 @@ OCLPolyHok.defmodule DP do
     }
 end
 
-# OCLPolyHok.include [DP]
-
 [arg] = System.argv()
 
 n = String.to_integer(arg)
 
-# {vet1,_} = Nx.Random.uniform(Nx.Random.key(1), shape: {1, n}, type: :f32)
-# {vet2,_} = Nx.Random.uniform(Nx.Random.key(1), shape: {1, n}, type: :f32)
-
-# vet1 = OCLPolyHok.new_nx_from_function(1,n,{:f,32},fn -> 1 end )
-# vet2 = OCLPolyHok.new_nx_from_function(1,n,{:f,32},fn -> 0.1 end )
-
-# vet1 = OCLPolyHok.new_nx_from_function_arg(1,n,{:f,32},fn x -> if Integer.is_even(x) do 10 else -10 end end )
-# vet2 = OCLPolyHok.new_nx_from_function(1,n,{:f,32},fn  -> 1 end)
-
-# vet1 = DP.new_dataset_nx(n)
-# vet2 = OCLPolyHok.new_nx_from_function(1,n,{:f,32},fn  -> 1 end)
-
 vet1 = DP.new_dataset_nx_a(n)
 vet2 = DP.new_dataset_nx_b(n)
 
-# vet2 = Nx.tensor(DP.rep_change(n,1), type: {:f,32})
-# vet1 = Nx.iota({1,n}, type: :f32)
-# vet2 = Nx.iota({1,n}, type: :f32)
-
-# vet1 = OCLPolyHok.new_nx_from_function(1,n,{:f,32},fn -> :rand.uniform(1000) end )
-# vet2 = OCLPolyHok.new_nx_from_function(1,n,{:f,32},fn -> :rand.uniform(1000) end)
-
-# vet1 = OCLPolyHok.new_nx_from_function(1,n,{:f,32},fn -> 1.0 end )
-# vet2 = Nx.tensor([Enum.to_list(1..n)], type: {:f,32})
-
 prev = System.monotonic_time()
-
-# IO.inspect vet2
 
 ref1 = OCLPolyHok.new_gnx(vet1)
 
@@ -181,8 +155,6 @@ _result =
   |> DP.map2(ref2, OCLPolyHok.phok(fn a, b -> a * b end))
   |> DP.reduce(0.0, OCLPolyHok.phok(fn a, b -> a + b end))
   |> OCLPolyHok.get_gnx()
-
-# IO.inspect result
 
 next = System.monotonic_time()
 
