@@ -4,7 +4,7 @@ Process.flag(:min_bin_vheap_size, 4 * 1024 * 1024 * 1024)
 
 require OCLPolyHok
 
-OCLPolyHok.set_debug_logs(true)
+# OCLPolyHok.set_debug_logs(true)
 
 OCLPolyHok.defmodule MM do
   defk map2xy2D_kernel(arr1, arr2, par, resp, size, f) do
