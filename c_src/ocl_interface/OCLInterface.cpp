@@ -1,8 +1,5 @@
 #include "OCLInterface.hpp"
 
-// temp
-#include <chrono>
-
 OCLInterface::OCLInterface() : OCLInterface(false) {}
 
 OCLInterface::OCLInterface(bool enable_debug_logs)
@@ -285,7 +282,7 @@ cl::Buffer OCLInterface::createBuffer(size_t size, cl_mem_flags flags, void *hos
             std::cerr << "[OCL C++ Interface] Failed to create OpenCL buffer of size " << size << "." << std::endl;
             std::cerr << "> Error: " << e.what() << std::endl;
             std::cerr << "> Error code: " << std::to_string(error_code) << std::endl;
-            
+
             std::cerr << "\n[Device Memory Info]" << std::endl;
             std::cerr << "> Device Global Memory Size: " << global_mem_mb << " MB" << std::endl;
             std::cerr << "> Device Max Allocation Size: " << max_alloc_mb << " MB" << std::endl;
@@ -321,27 +318,13 @@ void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_r
 
 void OCLInterface::readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, size_t offset) const
 {
-    // Temporary timing for performance analysis
-    auto start_time = std::chrono::high_resolution_clock::now();
-
     this->command_queue.enqueueReadBuffer(buffer, CL_TRUE, offset, size, host_ptr);
-    
-    auto end_time = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double, std::milli> read_duration = end_time - start_time;
-    printf("[OCL C++ Interface] ReadBuffer (Device-to-Host) took %.3f ms | size: %zu bytes\n", read_duration.count(), size);
 }
 
 void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset) const
 {
-    // Temporary timing for performance analysis
-    auto start_time = std::chrono::high_resolution_clock::now();
-
     // This function could be non-blocking in the future...
     this->command_queue.enqueueWriteBuffer(buffer, CL_TRUE, offset, size, host_ptr);
-
-    auto end_time = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double, std::milli> write_duration = end_time - start_time;
-    printf("[OCL C++ Interface] WriteBuffer (Host-to-Device) took %.3f ms | size: %zu bytes\n", write_duration.count(), size);
 }
 
 void *OCLInterface::mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_flags flags, size_t size, size_t offset) const
