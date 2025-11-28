@@ -78,24 +78,6 @@ int main(int argc, char *argv[])
     final = (float *)malloc(sizeof(float));
     final[0] = 0;
 
-    /*
-    for(int i=0; i<N/2; i++) {
-    int v = rand() % 1000 + 1;
-
-    if (i % 2 == 0)
-     {
-        a[2*i] = (float) v;
-        a[2*i+1] = (float) -v;
-
-        int n = rand() % 1000 +1;
-
-        b[2*i] = (float) n;
-        b[2*i+1] = (float) n;
-
-    }
-
-*/
-
     int tot = N / 2;
     for (int i = 0; i < tot; i++)
     {
