@@ -2,7 +2,6 @@
 #include <cstdlib>
 #include <cstdio>
 #include <ctime>
-#include <chrono>
 
 #include "ocl_benchs.hpp"
 
@@ -137,8 +136,6 @@ int main(int argc, char *argv[])
     cl::Event kernel_execution_ev;
     cl::Event read_buffer_final_ev;
 
-    auto chrono_start = std::chrono::high_resolution_clock::now();
-
     // Creating device buffers
     cl::Buffer buffer_a(context, CL_MEM_READ_WRITE, M * M * sizeof(float));
     cl::Buffer buffer_b(context, CL_MEM_READ_WRITE, M * M * sizeof(float));
@@ -161,9 +158,6 @@ int main(int argc, char *argv[])
     // Copying result from device to host (D2H)
     queue.enqueueReadBuffer(buffer_c, CL_TRUE, 0, M * M * sizeof(float), c, nullptr, &read_buffer_final_ev);
 
-    auto chrono_end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double, std::milli> total_chrono_time = chrono_end - chrono_start;
-
     // Calculate time using profiling info
     cl_ulong write_start = write_buffers_start_ev.getProfilingInfo<CL_PROFILING_COMMAND_START>();
     cl_ulong write_end = write_buffers_end_ev.getProfilingInfo<CL_PROFILING_COMMAND_END>();
@@ -180,21 +174,6 @@ int main(int argc, char *argv[])
     double total_time_profiling = write_time + kernel_time + read_time;
 
     printf("OpenCL\t%d\t%3.1f\n", M, total_time_profiling);
-    printf("-------------------------\n");
-    printf("Platform: %s\n", platform_name.c_str());
-    printf("Device: %s\n", device_name.c_str());
-    printf("-------------------------\n");
-    printf("Threads per block: %d x %d\n", block_size, block_size);
-    printf("Blocks per grid: %d x %d\n", grid_cols, grid_rows);
-    printf("-------------------------\n");
-    printf("Global range: %lu x %lu\n", global_range[0], global_range[1]);
-    printf("Local range: %lu x %lu\n", local_range[0], local_range[1]);
-    printf("-------------------------\n");
-    printf("Total time (chrono): %3.5f ms\n", total_chrono_time.count());
-    printf("Total time (profiling): %3.5f ms\n", total_time_profiling);
-    printf("Write buffers time (profiling): %3.5f ms\n", write_time);
-    printf("Kernel execution time (profiling): %3.5f ms\n", kernel_time);
-    printf("Read buffer time (profiling): %3.5f ms\n", read_time);
 
     // Validate results with CPU computation
     // cpu_mm(a, b, cpu_result, M, M, M);

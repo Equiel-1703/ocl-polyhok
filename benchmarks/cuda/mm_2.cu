@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <time.h>
-#include <chrono>
 
 __device__ float anon_ajh07a72e0(float *mat1, float *mat2, int m, int x, int y)
 {
@@ -63,8 +62,6 @@ int main(int argc, char const *argv[])
     cudaEventCreate(&stop);
     cudaEventRecord(start, 0);
 
-    auto chrono_start = std::chrono::high_resolution_clock::now();
-
     cudaMalloc((void **)&d_a, sizeof(float) * m * m);
     j_error = cudaGetLastError();
     if (j_error != cudaSuccess)
@@ -78,8 +75,6 @@ int main(int argc, char const *argv[])
     if (j_error != cudaSuccess)
         printf("Error 3: %s\n", cudaGetErrorString(j_error));
 
-    auto h2d_start = std::chrono::high_resolution_clock::now();
-
     cudaMemcpy(d_a, a, sizeof(float) * m * m, cudaMemcpyHostToDevice);
     j_error = cudaGetLastError();
     if (j_error != cudaSuccess)
@@ -89,8 +84,6 @@ int main(int argc, char const *argv[])
     if (j_error != cudaSuccess)
         printf("Error 5: %s\n", cudaGetErrorString(j_error));
 
-    auto h2d_end = std::chrono::high_resolution_clock::now();
-
     map2xy2D_kernel<<<dimGrid, dimBlock>>>(d_a, d_b, m, d_c, m);
 
     j_error = cudaGetLastError();
@@ -99,35 +92,17 @@ int main(int argc, char const *argv[])
 
     cudaDeviceSynchronize();
 
-    auto kernel_end = std::chrono::high_resolution_clock::now();
-
     // Copiando resultados pra A, já que não precisamos mais das matrizes originais
     cudaMemcpy(a, d_c, sizeof(float) * m * m, cudaMemcpyDeviceToHost);
     j_error = cudaGetLastError();
     if (j_error != cudaSuccess)
         printf("Error 7: %s\n", cudaGetErrorString(j_error));
 
-    auto chrono_end = std::chrono::high_resolution_clock::now();
-
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&time, start, stop);
 
-    std::chrono::duration<double, std::milli> chrono_total = chrono_end - chrono_start;
-    std::chrono::duration<double, std::milli> chrono_h2d = h2d_end - h2d_start;
-    std::chrono::duration<double, std::milli> chrono_kernel = kernel_end - h2d_end;
-    std::chrono::duration<double, std::milli> chrono_d2h = chrono_end - kernel_end;
-
     printf("cuda\t%d\t%3.1f\n", m, time);
-    printf("-------------------------\n");
-    printf("Threads per block: %d x %d\n", block_size, block_size);
-    printf("Grid size: %d x %d\n", grid_cols, grid_rows);
-    printf("-------------------------\n");
-    printf("Total time (cuda events): %3.5f ms\n", time);
-    printf("Total time (chrono): %3.5f ms\n", chrono_total.count());
-    printf("H2D time (chrono): %3.5f ms\n", chrono_h2d.count());
-    printf("Kernel time (chrono): %3.5f ms\n", chrono_kernel.count());
-    printf("D2H time (chrono): %3.5f ms\n", chrono_d2h.count());
 
     free(a);
     free(b);
