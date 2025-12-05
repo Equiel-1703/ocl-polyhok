@@ -71,7 +71,7 @@ void genBpm(int height, int width, float *pixelbuffer_f)
     fwrite(pbitmap, 1, sizeof(bitmap), fp);
     fwrite(pixelbuffer, 1, pixelbytesize, fp);
     fclose(fp);
-    
+
     free(pbitmap);
     free(pixelbuffer);
 }
@@ -132,17 +132,14 @@ int main(int argc, char const *argv[])
     int size_array = height * width * 4 * sizeof(int);
     cudaError_t j_error;
 
-    // int pixelbytesize=  height*width*_bitsperpixel/8;
-    // printf(" pixel byte size %lu\n",pixelbytesize);
+    int *h_pixelbuffer = (int *)malloc(size_array);
+    int *d_pixelbuffer;
 
     float time;
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start, 0);
-
-    int *h_pixelbuffer = (int *)malloc(size_array);
-    int *d_pixelbuffer;
 
     ////////
     cudaMalloc((void **)&d_pixelbuffer, size_array);

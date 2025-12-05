@@ -1,7 +1,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstdio>
-#include <ctime>
+#include <chrono>
 
 #include "ocl_benchs.hpp"
 #include "ocl_bmp.hpp"
@@ -108,8 +108,13 @@ int main(int argc, char const *argv[])
 
     // Host pixel buffer
     int *h_pixelbuffer = (int *)malloc(size_array);
-    // Device pixel buffer
+    // Create device pixel buffer and measure its creation time
+    auto buff_start = std::chrono::high_resolution_clock::now();
+
     cl::Buffer d_pixelbuffer(context, CL_MEM_READ_WRITE, size_array);
+    
+    auto buff_end =   std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> buffer_creation_time = buff_end - buff_start;
 
     // Setup NDRange for kernel launch
     cl::NDRange local_range(1, 1);
@@ -135,7 +140,9 @@ int main(int argc, char const *argv[])
 
     double kernel_execution_time = (kernel_end_time - kernel_start_time) * 1e-6; // Convert to milliseconds
     double read_execution_time = (read_end_time - read_start_time) * 1e-6;       // Convert to milliseconds
-    double total_execution_time = kernel_execution_time + read_execution_time;
+
+    // The total execution time includes kernel execution, read time, and buffer creation time
+    double total_execution_time = kernel_execution_time + read_execution_time + buffer_creation_time.count();
 
     printf("OpenCL\t%d\t%3.1f\n", usr_value, total_execution_time);
 
