@@ -36,6 +36,8 @@ void checkElementsAre(float *gpu, float *cpu, int N)
     printf("SUCCESS! All values computed correctly.\n");
 }
 
+// ---- OpenCL kernel code for matrix multiplication ----
+
 std::string opencl_kernel_code = R"CLC(
 float anon_ajh07a72e0(__global float *mat1, __global float *mat2, int M, int x, int y)
 {
