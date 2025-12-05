@@ -217,7 +217,7 @@ int main(int argc, char *argv[])
     printf("CUDA\t%d\t%3.1f\n", N, time);
 
     // Debug stuff
-    /**
+    /*
     printf("Result: %f\n", final[0]);
     printf("-------------------------\n");
     printf("Threads per block: %d\n", threadsPerBlock);

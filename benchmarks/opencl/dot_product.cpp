@@ -208,7 +208,7 @@ int main(int argc, char *argv[])
   printf("OpenCL\t%d\t%3.1f\n", N, total_time_profiling);
 
   // Debug stuff
-  /**
+  /*
   printf("Result: %f\n", final[0]);
   printf("-------------------------\n");
   printf("Platform: %s\n", platform_name.c_str());

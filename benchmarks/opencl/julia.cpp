@@ -137,7 +137,7 @@ int main(int argc, char const *argv[])
 
     // The total execution time includes kernel execution and read time
     // The buffer creation time is ignored, since CUDA events do not account for it:
-    /**
+    /*
      * cudaMalloc(), however, is primarily a host-side (CPU) operation.
      * While it does interact with the GPU driver to allocate memory on the device,
      * the bulk of its execution time is spent on the CPU, managing memory and setting up the allocation.
@@ -147,11 +147,15 @@ int main(int argc, char const *argv[])
     double total_execution_time = kernel_execution_time + read_execution_time;
 
     printf("OpenCL\t%d\t%3.1f\n", usr_value, total_execution_time);
+
+    // Debug stuff
+    /* 
     printf("Platform: %s\n", platform_name.c_str());
     printf("Device: %s\n", device_name.c_str());
     printf("Kernel Execution Time (ms): %3.1f\n", kernel_execution_time);
     printf("Read Execution Time (ms): %3.1f\n", read_execution_time);
     printf("Total Execution Time (ms): %3.1f\n", total_execution_time);
+    */
 
     // Generate BMP file
     // genBpm(height, width, h_pixelbuffer);

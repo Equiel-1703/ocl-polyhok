@@ -182,9 +182,13 @@ int main(int argc, char const *argv[])
     cudaEventElapsedTime(&time, start, stop);
 
     printf("CUDA\t%d\t%3.1f\n", usr_value, time);
+
+    // Debug stuff
+    /* 
     printf("  Kernel Time (ms): %3.1f\n", kernel_duration.count());
     printf("  Read Time (ms): %3.1f\n", read_duration.count());
     printf("  Total Time [Chrono] (ms): %3.1f\n", kernel_duration.count() + read_duration.count());
+    */
 
     // genBpm(height,width,h_pixelbuffer);
 
