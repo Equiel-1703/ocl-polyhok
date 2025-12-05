@@ -1,7 +1,6 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstdio>
-#include <chrono>
 
 #include "ocl_benchs.hpp"
 #include "ocl_bmp.hpp"
@@ -108,13 +107,8 @@ int main(int argc, char const *argv[])
 
     // Host pixel buffer
     int *h_pixelbuffer = (int *)malloc(size_array);
-    // Create device pixel buffer and measure its creation time
-    auto buff_start = std::chrono::high_resolution_clock::now();
-
+    // Create device pixel buffer
     cl::Buffer d_pixelbuffer(context, CL_MEM_READ_WRITE, size_array);
-    
-    auto buff_end =   std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double, std::milli> buffer_creation_time = buff_end - buff_start;
 
     // Setup NDRange for kernel launch
     cl::NDRange local_range(1, 1);
@@ -141,10 +135,23 @@ int main(int argc, char const *argv[])
     double kernel_execution_time = (kernel_end_time - kernel_start_time) * 1e-6; // Convert to milliseconds
     double read_execution_time = (read_end_time - read_start_time) * 1e-6;       // Convert to milliseconds
 
-    // The total execution time includes kernel execution, read time, and buffer creation time
-    double total_execution_time = kernel_execution_time + read_execution_time + buffer_creation_time.count();
+    // The total execution time includes kernel execution and read time
+    // The buffer creation time is ignored, since CUDA events do not account for it:
+    /**
+     * cudaMalloc(), however, is primarily a host-side (CPU) operation.
+     * While it does interact with the GPU driver to allocate memory on the device,
+     * the bulk of its execution time is spent on the CPU, managing memory and setting up the allocation.
+     * Since CUDA events are tied to the GPU's execution stream, they cannot reliably capture the time spent
+     * by the CPU during cudaMalloc().
+     */
+    double total_execution_time = kernel_execution_time + read_execution_time;
 
     printf("OpenCL\t%d\t%3.1f\n", usr_value, total_execution_time);
+    printf("Platform: %s\n", platform_name.c_str());
+    printf("Device: %s\n", device_name.c_str());
+    printf("Kernel Execution Time (ms): %3.1f\n", kernel_execution_time);
+    printf("Read Execution Time (ms): %3.1f\n", read_execution_time);
+    printf("Total Execution Time (ms): %3.1f\n", total_execution_time);
 
     // Generate BMP file
     // genBpm(height, width, h_pixelbuffer);

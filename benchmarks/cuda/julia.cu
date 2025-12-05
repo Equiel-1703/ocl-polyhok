@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <malloc.h>
+#include <chrono>
 
 #define _bitsperpixel 32
 #define _planes 1
@@ -152,24 +153,37 @@ int main(int argc, char const *argv[])
     dim3 grid(DIM, DIM);
 
     // int (*f)(float*,int,int,int) = (int (*)(float*,int,int,int)) get_julia_function_ptr();
+    auto kernel_start = std::chrono::high_resolution_clock::now();
 
     mapgen2D_xy_1para_noret_ker<<<grid, 1>>>(d_pixelbuffer, DIM, DIM);
 
     j_error = cudaGetLastError();
     if (j_error != cudaSuccess)
         printf("Error 3: %s\n", cudaGetErrorString(j_error));
+
+    auto kernel_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> kernel_duration = kernel_end - kernel_start;
     ////////
+
+    auto read_start = std::chrono::high_resolution_clock::now();
 
     cudaMemcpy(h_pixelbuffer, d_pixelbuffer, size_array, cudaMemcpyDeviceToHost); // return results
     j_error = cudaGetLastError();
     if (j_error != cudaSuccess)
         printf("Error 7: %s\n", cudaGetErrorString(j_error));
 
+    auto read_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> read_duration = read_end - read_start;
+    ////////
+
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&time, start, stop);
 
     printf("CUDA\t%d\t%3.1f\n", usr_value, time);
+    printf("  Kernel Time (ms): %3.1f\n", kernel_duration.count());
+    printf("  Read Time (ms): %3.1f\n", read_duration.count());
+    printf("  Total Time [Chrono] (ms): %3.1f\n", kernel_duration.count() + read_duration.count());
 
     // genBpm(height,width,h_pixelbuffer);
 
