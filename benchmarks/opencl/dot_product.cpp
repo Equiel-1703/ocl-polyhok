@@ -151,7 +151,7 @@ int main(int argc, char *argv[])
   cl::NDRange local_range(threadsPerBlock);
 
   // Creating OpenCL events to measure time using profiling info
-  cl::Event write_buffers_start_ev, write_buffers_end_ev, read_buffer_final_ev;
+  cl::Event write_buffers_start_ev, write_buffers_end_ev, read_buffer_ev, map_kernel_ev, reduce_kernel_ev;
 
   auto chrono_start = std::chrono::high_resolution_clock::now();
 
@@ -178,11 +178,11 @@ int main(int argc, char *argv[])
   reduce_kernel.setArg(3, N);
 
   // Run kernels
-  queue.enqueueNDRangeKernel(map_2kernel, cl::NullRange, global_range, local_range);
-  queue.enqueueNDRangeKernel(reduce_kernel, cl::NullRange, global_range, local_range);
+  queue.enqueueNDRangeKernel(map_2kernel, cl::NullRange, global_range, local_range, nullptr, &map_kernel_ev);
+  queue.enqueueNDRangeKernel(reduce_kernel, cl::NullRange, global_range, local_range, nullptr, &reduce_kernel_ev);
 
   // Read back the result
-  queue.enqueueReadBuffer(d_final, CL_TRUE, 0, sizeof(float), final, nullptr, &read_buffer_final_ev);
+  queue.enqueueReadBuffer(d_final, CL_TRUE, 0, sizeof(float), final, nullptr, &read_buffer_ev);
 
   auto chrono_end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double, std::milli> chrono_time = chrono_end - chrono_start;
@@ -191,15 +191,24 @@ int main(int argc, char *argv[])
   cl_ulong write_buffers_start = write_buffers_start_ev.getProfilingInfo<CL_PROFILING_COMMAND_START>();
   cl_ulong write_buffers_end = write_buffers_end_ev.getProfilingInfo<CL_PROFILING_COMMAND_END>();
 
-  cl_ulong read_buffer_final_start = read_buffer_final_ev.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-  cl_ulong read_buffer_final_end = read_buffer_final_ev.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+  cl_ulong map_kernel_start = map_kernel_ev.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+  cl_ulong map_kernel_end = map_kernel_ev.getProfilingInfo<CL_PROFILING_COMMAND_END>();
 
-  double total_time_profiling = (read_buffer_final_end - write_buffers_start) / 1e6;
+  cl_ulong reduce_kernel_start = reduce_kernel_ev.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+  cl_ulong reduce_kernel_end = reduce_kernel_ev.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+
+  cl_ulong read_buffer_start = read_buffer_ev.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+  cl_ulong read_buffer_end = read_buffer_ev.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+
   double write_buffers_time_profiling = (write_buffers_end - write_buffers_start) / 1e6;
-  double kernel_execution_time_profiling = (read_buffer_final_start - write_buffers_end) / 1e6;
-  double read_buffer_time_profiling = (read_buffer_final_end - read_buffer_final_start) / 1e6;
+  double kernel_execution_time_profiling = ((map_kernel_end - map_kernel_start) + (reduce_kernel_end - reduce_kernel_start)) / 1e6;
+  double read_buffer_time_profiling = (read_buffer_end - read_buffer_start) / 1e6;
+  double total_time_profiling = write_buffers_time_profiling + kernel_execution_time_profiling + read_buffer_time_profiling;
 
   printf("OpenCL\t%d\t%3.1f\n", N, total_time_profiling);
+
+  // Debug stuff
+  /**
   printf("Result: %f\n", final[0]);
   printf("-------------------------\n");
   printf("Platform: %s\n", platform_name.c_str());
@@ -216,6 +225,7 @@ int main(int argc, char *argv[])
   printf("Write buffers time (profiling): %3.5f ms\n", write_buffers_time_profiling);
   printf("Kernel execution time (profiling): %3.5f ms\n", kernel_execution_time_profiling);
   printf("Read buffer time (profiling): %3.5f ms\n", read_buffer_time_profiling);
+  */
 
   free(a);
   free(b);

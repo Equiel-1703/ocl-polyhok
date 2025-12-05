@@ -147,7 +147,6 @@ vet2 = DP.new_dataset_nx_b(n)
 prev = System.monotonic_time()
 
 ref1 = OCLPolyHok.new_gnx(vet1)
-
 ref2 = OCLPolyHok.new_gnx(vet2)
 
 _result =

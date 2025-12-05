@@ -215,6 +215,9 @@ int main(int argc, char *argv[])
     cudaEventElapsedTime(&time, start, stop);
 
     printf("CUDA\t%d\t%3.1f\n", N, time);
+
+    // Debug stuff
+    /**
     printf("Result: %f\n", final[0]);
     printf("-------------------------\n");
     printf("Threads per block: %d\n", threadsPerBlock);
@@ -228,6 +231,7 @@ int main(int argc, char *argv[])
     printf("H2D copy time (chrono): %3.5f ms\n", h2d_time.count());
     printf("Kernel execution time (chrono): %3.5f ms\n", kernel_time.count());
     printf("D2H copy time (chrono): %3.5f ms\n", d2h_time.count());
+    */
 
     free(a);
     free(b);
