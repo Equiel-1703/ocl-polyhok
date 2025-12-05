@@ -156,6 +156,7 @@ int main(int argc, char const *argv[])
     auto kernel_start = std::chrono::high_resolution_clock::now();
 
     mapgen2D_xy_1para_noret_ker<<<grid, 1>>>(d_pixelbuffer, DIM, DIM);
+    cudaDeviceSynchronize();
 
     j_error = cudaGetLastError();
     if (j_error != cudaSuccess)
