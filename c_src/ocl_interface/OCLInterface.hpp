@@ -7,6 +7,15 @@
 #include <vector>
 #include <stdexcept>
 
+/**
+ * @class OCLInterface
+ * @brief A class that provides an interface for OpenCL operations, including platform and device selection,
+ * context and command queue creation, program and kernel management, and buffer operations.
+ * 
+ * This class simplifies the process of working with OpenCL by encapsulating common tasks.
+ * 
+ * @authors Henrique Gabriel Rodrigues, Prof. Dr. André Rauber Du Bois
+ */
 class OCLInterface
 {
 private:

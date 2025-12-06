@@ -4,6 +4,15 @@
 #include <stdexcept>
 #include <cstring>
 
+/**
+ * @class BMP
+ * @brief A class for creating and managing BMP image files.
+ * 
+ * This class provides functionality to create a BMP file, write pixel data,
+ * and save the file to disk. It supports 24-bit and 32-bit BMP formats.
+ * 
+ * @authors Henrique Gabriel Rodrigues, Prof. Dr. André Rauber Du Bois
+ */
 class BMP
 {
 private:

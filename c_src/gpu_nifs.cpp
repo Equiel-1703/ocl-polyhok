@@ -1,3 +1,12 @@
+/*
+    This file implements the Native Implemented Functions (NIFs) for GPU operations using OpenCL
+    in Elixir.
+
+    Ported to OpenCL/C++ by: Henrique Gabriel Rodrigues
+    Oriented and supervised by: Prof. Dr. André Rauber Du Bois
+    Original code by: Prof. Dr. André Rauber Du Bois
+*/
+
 #include "ocl_interface/OCLInterface.hpp"
 
 #include <erl_nif.h>

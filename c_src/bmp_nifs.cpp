@@ -1,3 +1,10 @@
+/*
+    This NIF module provides functions to generate BMP image files from pixel data.
+
+    Made by: Henrique Gabriel Rodrigues
+    Oriented and supervised by: Prof. Dr. André Rauber Du Bois
+*/
+
 #include <erl_nif.h>
 
 #include "bmp/BMP.hpp"

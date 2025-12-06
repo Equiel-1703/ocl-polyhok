@@ -2,6 +2,8 @@
     This header defines the OpenCL version to use, include OpenCL headers and enables C++ exceptions.
     
     It is configured to use OpenCL 2.0 features.
+
+    Made by: Henrique Gabriel Rodrigues, Prof. Dr. André Rauber Du Bois
 */
 
 #pragma once

@@ -3,6 +3,9 @@
     This is used only for the OpenCL benchmarks.
     
     It is configured to use OpenCL 2.0 features.
+
+    Made by: Henrique Gabriel Rodrigues
+    Oriented and supervised by: Prof. Dr. André Rauber Du Bois
 */
 
 #pragma once
