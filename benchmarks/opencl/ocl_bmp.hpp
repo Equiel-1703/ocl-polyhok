@@ -1,3 +1,10 @@
+/*
+    This header defines structures and a function to generate a BMP image file.
+
+    Ported by: Henrique Gabriel Rodrigues
+    Original code by: Prof. Dr. André Rauber Du Bois
+*/
+
 #pragma once
 
 #include <cstdint>
@@ -39,12 +46,12 @@ typedef struct
 } Bitmap;
 #pragma pack(pop)
 
-void genBpm(int height, int width, int *pixelbuffer_i)
+void genBpm(const char *filename, int height, int width, int *pixelbuffer_i)
 {
   uint32_t pixelbytesize = height * width * _bitsperpixel / 8;
   uint32_t _filesize = pixelbytesize + sizeof(Bitmap);
-  
-  FILE *fp = fopen("julia.bmp", "wb");
+
+  FILE *fp = fopen(filename, "wb");
   Bitmap *pbitmap = (Bitmap *)calloc(1, sizeof(Bitmap));
 
   int buffer_size = height * width * 4;

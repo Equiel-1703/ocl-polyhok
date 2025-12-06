@@ -158,7 +158,7 @@ int main(int argc, char const *argv[])
     */
 
     // Generate BMP file
-    // genBpm(height, width, h_pixelbuffer);
+    // genBpm("julia.bmp", height, width, h_pixelbuffer);
 
     free(h_pixelbuffer);
 }
