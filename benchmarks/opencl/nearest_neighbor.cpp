@@ -218,12 +218,22 @@ int main(int argc, char *argv[])
   cl_ulong read_start = read_ev.getProfilingInfo<CL_PROFILING_COMMAND_START>();
   cl_ulong read_end = read_ev.getProfilingInfo<CL_PROFILING_COMMAND_END>();
 
-  double write_time = ((write_1_end - write_1_start) + (write_2_end - write_2_start)) / 1e6;
-  double kernel_time = ((kernel_1_end - kernel_1_start) + (kernel_2_end - kernel_2_start)) / 1e6;
+  double write_1_time = (write_1_end - write_1_start) / 1e6;
+  double write_2_time = (write_2_end - write_2_start) / 1e6;
+  double kernel_1_time = (kernel_1_end - kernel_1_start) / 1e6;
+  double kernel_2_time = (kernel_2_end - kernel_2_start) / 1e6;
   double read_time = (read_end - read_start) / 1e6;
-  double total_time = write_time + kernel_time + read_time;
+  double total_time = write_1_time + write_2_time + kernel_1_time + kernel_2_time + read_time;
 
   printf("OpenCL\t%d\t%3.1f\n", numRecords, total_time);
+  printf("Total time (ms): %3.5f\n", total_time);
+  printf("Write 1 time (ms) [locations]: %3.5f\n", write_1_time);
+  printf("Write 2 time (ms) [result]: %3.5f\n", write_2_time);
+  printf("Kernel 1 time (ms): %3.5f\n", kernel_1_time);
+  printf("Kernel 2 time (ms): %3.5f\n", kernel_2_time);
+  printf("Read time (ms): %3.5f\n", read_time);
+
+  return 0;
 }
 
 void loadData(double *locations, int size)

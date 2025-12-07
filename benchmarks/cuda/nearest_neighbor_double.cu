@@ -5,12 +5,10 @@
  */
 
 #include <stdio.h>
-#include <sys/time.h>
+#include <stdlib.h>
 #include <float.h>
-#include <vector>
+#include <chrono>
 #include "cuda.h"
-
-#include <time.h>
 
 __device__ static double atomic_cas(double *address, double oldv, double newv)
 {
@@ -80,27 +78,7 @@ extern "C" __global__ void reduce_kernel(double *a, double *ref4, int n)
 }
 
 void loadData(double *locations, int size);
-// void findLowest(std::vector<Record> &records,float *distances,int numRecords,int topN);
-// void printUsage();
-// int parseCommandline(int argc, char *argv[], char* filename,int *r,float *lat,float *lng,
-//                      int *q, int *t, int *p, int *d);
 
-/**
-* Kernel
-* Executed on GPU
-* Calculates the Euclidean distance from each record in the database to the target position
-
-__global__ void euclid(LatLong *d_locations, float *d_distances, int numRecords,float lat, float lng)
-{
-    //int globalId = gridDim.x * blockDim.x * blockIdx.y + blockDim.x * blockIdx.x + threadIdx.x;
-    int globalId = blockDim.x * ( gridDim.x * blockIdx.y + blockIdx.x ) + threadIdx.x; // more efficient
-    LatLong *latLong = d_locations+globalId;
-    if (globalId < numRecords) {
-        float *dist=d_distances+globalId;
-        *dist = (float)sqrt((lat-latLong->lat)*(lat-latLong->lat)+(lng-latLong->lng)*(lng-latLong->lng));
-    }
-}
-**/
 /**
  * This program finds the k-nearest neighbors
  **/
@@ -137,14 +115,20 @@ int main(int argc, char *argv[])
     /**
      * Transfer data from host to device
      */
+    auto copy_1_start = std::chrono::high_resolution_clock::now();
     cudaMemcpy(d_locations, &locations[0], sizeof(double) * 2 * numRecords, cudaMemcpyHostToDevice);
+    auto copy_1_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> copy_1_duration = copy_1_end - copy_1_start; // Calculate duration in ms
 
     /**
      * Execute kernel --
      */
+    auto kernel_1_start = std::chrono::high_resolution_clock::now();
     map_step_2para_1resp_kernel<<<numRecords, 1>>>(d_locations, d_distances, 2, 0.0, 0.0, numRecords);
 
     cudaDeviceSynchronize();
+    auto kernel_1_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> kernel_1_duration = kernel_1_end - kernel_1_start; // Calculate duration in ms
 
     int threadsPerBlock = 256;
     int blocksPerGrid = (numRecords + threadsPerBlock - 1) / threadsPerBlock;
@@ -153,13 +137,23 @@ int main(int argc, char *argv[])
     resp = (double *)malloc(sizeof(double));
     resp[0] = 50000;
     cudaMalloc((void **)&d_resp, sizeof(double));
-    cudaMemcpy(d_resp, resp, sizeof(double), cudaMemcpyHostToDevice);
 
+    auto copy_2_start = std::chrono::high_resolution_clock::now();
+    cudaMemcpy(d_resp, resp, sizeof(double), cudaMemcpyHostToDevice);
+    auto copy_2_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> copy_2_duration = copy_2_end - copy_2_start; // Calculate duration in ms
+
+    auto kernel_2_start = std::chrono::high_resolution_clock::now();
     reduce_kernel<<<blocksPerGrid, threadsPerBlock>>>(d_distances, d_resp, numRecords);
     cudaDeviceSynchronize();
+    auto kernel_2_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> kernel_2_duration = kernel_2_end - kernel_2_start; // Calculate duration in ms
 
     // Copy data from device memory to host memory
+    auto copy_3_start = std::chrono::high_resolution_clock::now();
     cudaMemcpy(resp, d_resp, sizeof(double), cudaMemcpyDeviceToHost);
+    auto copy_3_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> copy_3_duration = copy_3_end - copy_3_start; // Calculate duration in ms
 
     // Free memory
     free(locations);
@@ -173,7 +167,17 @@ int main(int argc, char *argv[])
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&time, start, stop);
 
+    double total_time = copy_1_duration.count() + kernel_1_duration.count() + copy_2_duration.count() + kernel_2_duration.count() + copy_3_duration.count();
+
     printf("CUDA\t%d\t%3.1f\n", numRecords, time);
+    printf("Total time (chrono): %3.1f ms\n", total_time);
+    printf("Copy 1 time (H2D) [locations]: %3.1f ms\n", copy_1_duration.count());
+    printf("Kernel 1 time: %3.1f ms\n", kernel_1_duration.count());
+    printf("Copy 2 time (H2D) [resp]: %3.1f ms\n", copy_2_duration.count());
+    printf("Kernel 2 time: %3.1f ms\n", kernel_2_duration.count());
+    printf("Copy 3 time (D2H) [d_resp]: %3.1f ms\n", copy_3_duration.count());
+
+    return 0;
 }
 
 void loadData(double *locations, int size)
