@@ -87,9 +87,9 @@ m = String.to_integer(arg)
 
 dim = m
 
-result_gpu = OCLPolyHok.new_gnx(dim * dim, 4, {:s, 32})
-
 prev = System.monotonic_time()
+
+result_gpu = OCLPolyHok.new_gnx(dim * dim, 4, {:s, 32})
 
 _image =
   result_gpu
