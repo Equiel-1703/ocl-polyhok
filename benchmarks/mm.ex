@@ -81,7 +81,7 @@ m = String.to_integer(size)
 mat1 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
 mat2 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
 
-kernel_start = System.monotonic_time()
+timing_start = System.monotonic_time()
 
 _result =
   OCLPolyHok.gpufor x <- 0..m, y <- 0..m, mat1, mat2, m do
@@ -95,9 +95,9 @@ _result =
     sum
   end
 
-kernel_end = System.monotonic_time()
+timing_end = System.monotonic_time()
 
 # Calculate times in milliseconds
-kernel_time = System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)
+time = System.convert_time_unit(timing_end - timing_start, :native, :millisecond)
 
-IO.puts("OCLPolyHok\t#{m}\t#{kernel_time}")
+IO.puts("OCLPolyHok\t#{m}\t#{time}")

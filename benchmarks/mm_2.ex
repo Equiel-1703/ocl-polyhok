@@ -85,7 +85,7 @@ m = String.to_integer(size)
 mat1 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
 mat2 = OCLPolyHok.new_nx_from_function(m, m, {:f, 32}, fn -> :rand.uniform(1000) end)
 
-kernel_start = System.monotonic_time()
+timing_start = System.monotonic_time()
 
 result =
   OCLPolyHok.gpufor x <- 0..m, y <- 0..m, mat1, mat2, m do
@@ -99,10 +99,7 @@ result =
     sum
   end
 
-kernel_end = System.monotonic_time()
-
-# Calculate times in milliseconds
-kernel_time = System.convert_time_unit(kernel_end - kernel_start, :native, :millisecond)
+timing_end = System.monotonic_time()
 
 # This is done so the VM won't reuse the allocated memory for the matrices,
 # since they are used here for "computation"
@@ -111,4 +108,7 @@ f_el_mat2 = Nx.to_number(mat2[0][0])
 f_el_res = Nx.to_number(result[0][0])
 _blablabla = f_el_mat1 + f_el_mat2 + f_el_res
 
-IO.puts("OCLPolyHok\t#{m}\t#{kernel_time}")
+# Calculate elapsed time in milliseconds
+time = System.convert_time_unit(timing_end - timing_start, :native, :millisecond)
+
+IO.puts("OCLPolyHok\t#{m}\t#{time}")
