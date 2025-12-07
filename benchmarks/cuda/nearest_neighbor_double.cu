@@ -167,15 +167,15 @@ int main(int argc, char *argv[])
     cudaFree(d_distances);
     cudaFree(d_resp);
 
-    double total_time = copy_1_duration.count() + kernel_1_duration.count() + copy_2_duration.count() + kernel_2_duration.count() + copy_3_duration.count();
+    double total_time_chrono = copy_1_duration.count() + kernel_1_duration.count() + copy_2_duration.count() + kernel_2_duration.count() + copy_3_duration.count();
 
     printf("CUDA\t%d\t%3.1f\n", numRecords, time);
-    printf("Total time (chrono): %3.1f ms\n", total_time);
-    printf("Copy 1 time (H2D) [locations]: %3.1f ms\n", copy_1_duration.count());
-    printf("Kernel 1 time: %3.1f ms\n", kernel_1_duration.count());
-    printf("Copy 2 time (H2D) [resp]: %3.1f ms\n", copy_2_duration.count());
-    printf("Kernel 2 time: %3.1f ms\n", kernel_2_duration.count());
-    printf("Copy 3 time (D2H) [d_resp]: %3.1f ms\n", copy_3_duration.count());
+    // printf("Total time (chrono): %3.1f ms\n", total_time_chrono);
+    // printf("Copy 1 time (H2D) [locations]: %3.1f ms\n", copy_1_duration.count());
+    // printf("Kernel 1 time: %3.1f ms\n", kernel_1_duration.count());
+    // printf("Copy 2 time (H2D) [resp]: %3.1f ms\n", copy_2_duration.count());
+    // printf("Kernel 2 time: %3.1f ms\n", kernel_2_duration.count());
+    // printf("Copy 3 time (D2H) [d_resp]: %3.1f ms\n", copy_3_duration.count());
 
     return 0;
 }

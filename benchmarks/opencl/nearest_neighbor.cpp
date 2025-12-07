@@ -226,12 +226,12 @@ int main(int argc, char *argv[])
   double total_time = write_1_time + write_2_time + kernel_1_time + kernel_2_time + read_time;
 
   printf("OpenCL\t%d\t%3.1f\n", numRecords, total_time);
-  printf("Total time (ms): %3.5f\n", total_time);
-  printf("Write 1 time (ms) [locations]: %3.5f\n", write_1_time);
-  printf("Write 2 time (ms) [result]: %3.5f\n", write_2_time);
-  printf("Kernel 1 time (ms): %3.5f\n", kernel_1_time);
-  printf("Kernel 2 time (ms): %3.5f\n", kernel_2_time);
-  printf("Read time (ms): %3.5f\n", read_time);
+  // printf("Total time (ms): %3.5f\n", total_time);
+  // printf("Write 1 time (ms) [locations]: %3.5f\n", write_1_time);
+  // printf("Write 2 time (ms) [result]: %3.5f\n", write_2_time);
+  // printf("Kernel 1 time (ms): %3.5f\n", kernel_1_time);
+  // printf("Kernel 2 time (ms): %3.5f\n", kernel_2_time);
+  // printf("Read time (ms): %3.5f\n", read_time);
 
   return 0;
 }
