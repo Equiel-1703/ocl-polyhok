@@ -195,7 +195,7 @@ int main(int argc, char *argv[])
 
     printf("OpenCL\t%d\t%3.1f\n", dim, total_time);
 
-    genBpm("raytracer.bmp", dim, dim, final_image);
+    // genBpm("raytracer.bmp", dim, dim, final_image);
 
     free(temp_s);
     free(final_image);
