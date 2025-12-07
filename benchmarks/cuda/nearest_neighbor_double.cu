@@ -155,6 +155,10 @@ int main(int argc, char *argv[])
     auto copy_3_end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> copy_3_duration = copy_3_end - copy_3_start; // Calculate duration in ms
 
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&time, start, stop);
+
     // Free memory
     free(locations);
     free(distances);
@@ -162,10 +166,6 @@ int main(int argc, char *argv[])
     cudaFree(d_locations);
     cudaFree(d_distances);
     cudaFree(d_resp);
-
-    cudaEventRecord(stop, 0);
-    cudaEventSynchronize(stop);
-    cudaEventElapsedTime(&time, start, stop);
 
     double total_time = copy_1_duration.count() + kernel_1_duration.count() + copy_2_duration.count() + kernel_2_duration.count() + copy_3_duration.count();
 
