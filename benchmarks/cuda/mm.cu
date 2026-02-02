@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <time.h>
 
+// Temp
+#include <chrono>
+
 void cpu_mm(float *h_a, float *h_b, float *h_result, int m, int n, int k)
 {
     for (int i = 0; i < m; ++i)
@@ -107,6 +110,9 @@ int main(int argc, char const *argv[])
     if (j_error != cudaSuccess)
         printf("Error 3: %s\n", cudaGetErrorString(j_error));
 
+    // Start mem copy
+    auto start_memcpy = std::chrono::steady_clock::now();
+    
     cudaMemcpy(d_a, a, sizeof(float) * m * m, cudaMemcpyHostToDevice);
     j_error = cudaGetLastError();
     if (j_error != cudaSuccess)
@@ -115,6 +121,11 @@ int main(int argc, char const *argv[])
     j_error = cudaGetLastError();
     if (j_error != cudaSuccess)
         printf("Error 5: %s\n", cudaGetErrorString(j_error));
+    
+    auto end_memcpy = std::chrono::steady_clock::now();
+    std::chrono::duration<double, std::milli> memcpy_duration = end_memcpy - start_memcpy;
+
+    auto start_kernel = std::chrono::steady_clock::now();
 
     map2xy2D_kernel<<<dimGrid, dimBlock>>>(d_a, d_b, m, d_c, m);
 
@@ -124,16 +135,27 @@ int main(int argc, char const *argv[])
 
     cudaDeviceSynchronize();
 
+    auto end_kernel = std::chrono::steady_clock::now();
+    std::chrono::duration<double, std::milli> kernel_duration = end_kernel - start_kernel;
+
+    auto start_memcpy_back = std::chrono::steady_clock::now();
+
     cudaMemcpy(c, d_c, sizeof(float) * m * m, cudaMemcpyDeviceToHost);
     j_error = cudaGetLastError();
     if (j_error != cudaSuccess)
         printf("Error 7: %s\n", cudaGetErrorString(j_error));
+
+    auto end_memcpy_back = std::chrono::steady_clock::now();
+    std::chrono::duration<double, std::milli> memcpy_back_duration = end_memcpy_back - start_memcpy_back;
 
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&time, start, stop);
 
     printf("cuda\t%d\t%3.1f\n", m, time);
+    printf("  H2D memcpy time: %3.1f ms\n", memcpy_duration.count());
+    printf("  Kernel time:     %3.1f ms\n", kernel_duration.count());
+    printf("  D2H memcpy time: %3.1f ms\n", memcpy_back_duration.count());
 
     free(a);
     free(b);

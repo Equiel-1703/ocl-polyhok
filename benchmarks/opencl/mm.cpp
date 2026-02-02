@@ -176,6 +176,9 @@ int main(int argc, char *argv[])
     double total_time_profiling = write_time + kernel_time + read_time;
 
     printf("OpenCL\t%d\t%3.1f\n", M, total_time_profiling);
+    printf("  Write time (H2D): %3.1f ms\n", write_time);
+    printf("  Kernel time:      %3.1f ms\n", kernel_time);
+    printf("  Read time (D2H):  %3.1f ms\n", read_time);
 
     // Validate results with CPU computation
     // cpu_mm(a, b, cpu_result, M, M, M);
