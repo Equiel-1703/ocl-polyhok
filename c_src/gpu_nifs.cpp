@@ -567,15 +567,15 @@ static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   // From here on, we will use the type name to determine the data size and allocate memory accordingly
   if (strcmp(type_name, "float") == 0)
   {
-    data_size = nrow * ncol * sizeof(float);
+    data_size = sizeof(float) * nrow * ncol;
   }
   else if (strcmp(type_name, "int") == 0)
   {
-    data_size = nrow * ncol * sizeof(int);
+    data_size = sizeof(int) * nrow * ncol;
   }
   else if (strcmp(type_name, "double") == 0)
   {
-    data_size = nrow * ncol * sizeof(double);
+    data_size = sizeof(double) * nrow * ncol;
   }
   else // Unknown type
   {
