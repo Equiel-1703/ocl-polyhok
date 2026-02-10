@@ -195,7 +195,7 @@ defmodule JIT do
 
     - `kernel_ast`: The abstract syntax tree (AST) of the kernel definition.
     - `inf_types`: A map where keys are variable names and values are their inferred types.
-    - `subs`: A set of substitutions to be applied during code generation.
+    - `subs`: A map of formal parameters that are functions mapped to their actual names in OpenCL code.
   ## Returns
     - A string containing the generated OpenCL code for the kernel.
   """
@@ -218,7 +218,7 @@ defmodule JIT do
       |> Enum.map(fn x ->
         case String.contains?(x, "*") do
           true ->
-            # If it is a pointer, we add the global address space
+            # If it is a pointer, we add the global address space prefix
             "__global #{x}"
 
           false ->
@@ -287,7 +287,7 @@ defmodule JIT do
   end
 
   @doc """
-  Returns a map of formal parameters that are functions and their actual names in OpenCL code.
+  Returns a map of formal parameters that are functions mapped to their actual names in OpenCL code.
   """
   def get_function_parameters({:defk, _, [header, [_body]]}, actual_para) do
     {_, _, formal_para} = header
@@ -449,6 +449,7 @@ defmodule JIT do
         kernelname
 
       _ ->
+        IO.inspect(kernel, label: "Invalid kernel")
         raise "OCLPolyHok.build: invalid kernel"
     end
   end
