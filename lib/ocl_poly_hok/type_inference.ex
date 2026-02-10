@@ -251,7 +251,7 @@ defmodule OCLPolyHok.TypeInference do
         |> Map.put(array, :none)
         |> set_type_exp(:int, arg2)
 
-      # assignment
+      # assignment to array index
       {:=, _, [{{:., _, [Access, :get]}, _, [{array, _, _}, acc_exp]}, exp]} ->
         case get_or_insert_var_type(map, array) do
           {map, :none} ->
@@ -296,6 +296,7 @@ defmodule OCLPolyHok.TypeInference do
             |> set_type_exp(:double, exp)
         end
 
+      # assignment to variable
       {:=, _, [var, exp]} ->
         var = get_var(var)
 
@@ -371,7 +372,7 @@ defmodule OCLPolyHok.TypeInference do
 
       {fun, _, args} when is_list(args) ->
         # IO.puts "case function"
-        # IO.inspect fun
+        # IO.inspect(fun, label: "Inferring function call for #{fun}")
         # IO.inspect args
         #  IO.puts "#########"
         # raise "hell"
