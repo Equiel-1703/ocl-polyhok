@@ -58,7 +58,7 @@ void init_ocl(ErlNifEnv *env)
     // Selecting default platform
     open_cl->selectDefaultPlatform();
 
-    // Selecting default GPU device
+    // Selecting default GPU device (i.e. the first available of its type)
     open_cl->selectDefaultDevice(CL_DEVICE_TYPE_GPU);
 
     // Check for extension support
