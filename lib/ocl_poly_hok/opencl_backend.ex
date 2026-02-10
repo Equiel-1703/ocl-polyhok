@@ -22,6 +22,8 @@ defmodule OCLPolyHok.OpenCLBackend do
 
     {:__aliases__, _, [module_name]} = header
 
+    # The 'JIT.process_module' line is the same called in OCLPolyHok.defmodule macro.
+    # It is here to ensure that the body will always be processed during runtime.
     using =
       quote do
         defmacro __using__(_opts) do
@@ -61,7 +63,7 @@ defmodule OCLPolyHok.OpenCLBackend do
     new_code =
       quote do:
               def(unquote({fname, comp_info, para}),
-                do: raise("A hok function can only be called by kernels!")
+                do: raise("A device function can only be called by kernels!")
               )
 
     [new_code | gen_new_definitions(t)]
@@ -506,6 +508,8 @@ defmodule OCLPolyHok.OpenCLBackend do
         "#{to_string(struct)}.#{to_string(field)}"
 
       # Square root of float (in OpenCL we don't need special function names for different types)
+      # I left this here for old cold compatibility, because otherwise it would try to call sqrtf, and this
+      # doesn't exist in OpenCL
       {:sqrtf, _, [arg]} ->
         "sqrt(#{gen_exp(arg)})"
 
@@ -522,7 +526,6 @@ defmodule OCLPolyHok.OpenCLBackend do
         to_string(var)
 
       {fun, _, args} ->
-        # module = get_module_name()
         nargs =
           args
           |> Enum.map(&gen_exp/1)
