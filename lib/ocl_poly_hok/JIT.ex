@@ -267,7 +267,7 @@ defmodule JIT do
   end
 
   @doc """
-  Returns a list of tuples {name, type} of all formal parameters that are functions.
+  Returns a list of tuples {function_name, type} of all formal parameters that are functions.
 
   If the actual parameter is an anonymous function, it returns {:anon, name, code, type}.
   """
