@@ -105,7 +105,7 @@ defmodule OCLPolyHok do
   defmacro defmodule(header, do: body) do
     {:__aliases__, _, [module_name]} = header
 
-    # JIT.process_module will capture the functions calls and functions declarations, storing them
+    # JIT.process_module will capture the functions ASTs, their type and call graph, storing them
     # in a map.
     JIT.process_module(module_name, body)
 
@@ -344,15 +344,18 @@ defmodule OCLPolyHok do
       )
 
   @doc """
-  Loads the Abstract Syntax Tree (AST) for a given kernel function.
+  Loads the Abstract Syntax Tree (AST) for a given kernel or function used inside a kernel.
 
-  This function extracts the module and function name from the provided kernel function reference,
-  then sends a request to the `:module_server` process to retrieve the corresponding AST.
-  It waits for a response and returns the AST if received, or raises an error for unknown messages.
+  This function tries to extract the module and function name from the provided kernel function reference (assuming to be a kernel).
+  If it is a kernel, then the name is extracted this way. If it is a function name, the name is already provided (is the atom itself).
+
+  With the name, a message is sent to the `:module_server` process to request the AST for the specified function.
+  The function then waits for a response from the `:module_server` process and returns the AST. If it fails, an error is raised.
 
   ## Parameters
 
-    - `kernel`: A function reference (e.g., `&Module.function/arity`) representing the kernel function whose AST is to be loaded.
+    - `kernel`: A function reference (e.g., `&Module.function/arity`) representing the kernel function whose AST is to be loaded. Or
+    a function name atom (e.g., `:function_name`) representing a function used inside a kernel.
 
   ## Returns
 
@@ -363,7 +366,7 @@ defmodule OCLPolyHok do
     - Raises an error if an unknown message is received from the `:module_server`.
   """
   def load_ast(kernel) do
-    # The function receives a kernel function reference (like `&Module.function/arity`), so we need to extract
+    # The function may receives a kernel function reference (like `&Module.function/arity`), so we need to extract
     # the module and function name from it.
     # The Macro.escape is used to convert the function reference into a form that can be pattern matched.
     # The pattern matching extracts the module and function name from the function reference.
@@ -372,7 +375,7 @@ defmodule OCLPolyHok do
         {:&, [], [{:/, [], [{{:., [], [module, f_name]}, [no_parens: true], []}, _nargs]}]} ->
           {module, f_name}
 
-        # This fallback is not doing anything useful, but it is here to handle cases where the pattern matching fails.
+        # This fallback is used in case we receive a function name directly (for functions used inside kernels).
         f ->
           {:ok, f}
       end
@@ -388,7 +391,7 @@ defmodule OCLPolyHok do
     send(:module_server, {:get_ast, f_name, self()})
 
     # Waits for a response from the `:module_server` process and returns the AST.
-    # If an unknown message is received, it raises an error.
+    # If an unknown message is received, we raise an error.
     receive do
       {:ast, ast} -> ast
       h -> raise "unknown message for function type server #{inspect(h)}"
@@ -420,8 +423,8 @@ defmodule OCLPolyHok do
         nil -> raise "Unknown kernel #{inspect(kernel_name)}"
       end
 
-    # Generates a map called 'delta' that maps formal parameters of the kernel to the inferred types
-    # of the actual parameters passed to the kernel (contained in the list `l`).
+    # Generates a map called 'delta' that maps the formal parameters of the kernel to the inferred types
+    # of the actual parameters provided to the kernel (contained in the list `l`).
     delta = JIT.gen_types_delta(kast, l)
 
     # Infers the types of the kernel's variables and functions based on the AST and the delta map inferred above.
@@ -432,11 +435,11 @@ defmodule OCLPolyHok do
       Map.values(inf_types) |> Enum.any?(fn x -> x == :double or x == :tdouble end)
 
     # If double precision is used, check if the device supports it.
-    unless double_supported_nif() or not contains_double do
+    if contains_double and not double_supported_nif() do
       raise "[OCL-PolyHok] Your OpenCL device does not support double precision floating point operations (fp64). The 'double' data type cannot be used in kernels."
     end
 
-    #  Returns a map of formal parameters that are functions and their actual names in OpenCL code.
+    # Returns a map of formal parameters that are functions and their actual names in OpenCL code.
     # This is needed so JIT.compile_kernel can replace the function parameters with their actual names in
     # the generated OpenCL code.
     subs = JIT.get_function_parameters(kast, l)
@@ -462,7 +465,7 @@ defmodule OCLPolyHok do
     comp = Enum.map(funs ++ other_funs, &JIT.compile_function/1)
     comp = Enum.reduce(comp, [], fn x, y -> y ++ x end)
 
-    # The `JIT.get_includes/0` function returns a list of OpenCL include CUDA code that
+    # The `JIT.get_includes/0` function returns a list of OpenCL code that
     # will be prepended to the generated kernel code.
     includes = JIT.get_includes()
     prog = [includes | comp] ++ [kernel]
