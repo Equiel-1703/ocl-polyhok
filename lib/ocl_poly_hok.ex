@@ -427,8 +427,28 @@ defmodule OCLPolyHok do
     # of the actual parameters provided to the kernel (contained in the list `l`).
     delta = JIT.gen_types_delta(kast, l)
 
-    # Infers the types of the kernel's variables and functions based on the AST and the delta map inferred above.
-    inf_types = JIT.infer_types(kast, delta)
+    # FIRST, we need to infer the signature types of all functions used in the kernel (return type and args types)
+    # This is needed to correctly infer the types of the kernel's internal variables and parameters, since they may depend on the return
+    # types of the functions used within the kernel.
+
+    # To start, let's get the ASTs of all functions used in the kernel (contained in the `fun_graph`). The 'fun_graph' doesn't include
+    # the functions passed as arguments to the kernel, but only those used within the kernel that are not parameters.
+    # This is good, because parameters functions may not exist yet at compile time (e.g. anonymous functions), an their types are
+    # highly dependent on the context of the kernel execution, so they are better inferred later during the kernel inference.
+    funs_graph_asts = JIT.get_non_parameters_func_asts(fun_graph)
+
+    # Infer the return and args types of all functions used in the kernel that are not passed as arguments
+    # based on their ASTs and add them to the delta map.
+    delta =
+      JIT.infer_device_functions_types(funs_graph_asts)
+      |> Enum.reduce(delta, fn {fun, types}, acc -> Map.put(acc, fun, types) end)
+
+    # Infers the types of the kernel's variables and functions based on the AST and the new delta map
+    inf_types =
+      case JIT.infer_types(kast, delta, kernel_name) do
+        {:ok, types} -> types
+        {:error, _types, reason} -> raise "Type inference failed: #{reason}"
+      end
 
     # Check if the inferred types contain 'double' or 'tdouble' types
     contains_double =
@@ -453,16 +473,26 @@ defmodule OCLPolyHok do
     # This is needed so we can compile correctly the functions that are passed as arguments to the kernel.
     funs = JIT.get_function_parameters_and_their_types(kast, l, inf_types)
 
-    # Takes the function graph and the inferred types, and returns a list of tuples where each tuple contains
-    # a function name and its inferred type. This is used to compile the functions that are not directly
+    # Takes the function graph and the kernel final inferred types and creates a list of tuples where each tuple contains
+    # a function name and its inferred type signature. This is used to compile the functions that are not directly
     # passed as arguments to the kernel, but are used within the kernel.
+    # The kernel final inferred types contains the inferred types of these functions because during the kernel type inference
+    # their type is updated. So if the type was incomplete before (e.g. just the return type was inferred), by the end of the kernel
+    # inference their type should be complete (return type and args types) =D
     other_funs =
       fun_graph
       |> Enum.map(fn x -> {x, inf_types[x]} end)
-      |> Enum.filter(fn {_, i} -> i != nil end)
+      |> Enum.filter(fn {_, i} -> i != nil end) # Remove functions that could not be inferred
 
     # Compiles all functions (both those passed as arguments and those used within the kernel).
-    comp = Enum.map(funs ++ other_funs, &JIT.compile_function/1)
+    comp =
+      Enum.map(
+        funs ++ other_funs,
+        fn f ->
+          JIT.compile_function(f)
+        end
+      )
+
     comp = Enum.reduce(comp, [], fn x, y -> y ++ x end)
 
     # The `JIT.get_includes/0` function returns a list of OpenCL code that
