@@ -9,7 +9,18 @@ defmodule OCLPolyHok.TypeInference do
                        {:get_group_id, {:int, [:int]}},
                        {:get_num_groups, {:int, [:int]}},
                        {:sqrt, {:float, [:float]}},
-                       {:sqrtf, {:float, [:float]}}
+                       {:sqrtf, {:float, [:float]}},
+                       {:max, {:float, [:float, :float]}},
+                       {:fmaxf, {:float, [:float, :float]}},
+                       {:min, {:float, [:float, :float]}},
+                       {:fminf, {:float, [:float, :float]}},
+                       {:sin, {:float, [:float]}},
+                       {:cos, {:float, [:float]}},
+                       {:tan, {:float, [:float]}},
+                       {:exp, {:float, [:float]}},
+                       {:log, {:float, [:float]}},
+                       {:pow, {:float, [:float, :float]}},
+                       {:trunc, {:int, [:float]}}
                      ])
 
   def set_debug_logs(value) do
