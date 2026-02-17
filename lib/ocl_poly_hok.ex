@@ -485,21 +485,22 @@ defmodule OCLPolyHok do
     # their type is updated. So if the type was incomplete before (e.g. just the return type was inferred), by the end of the kernel
     # inference their type should be complete (return type and args types) =D
     other_funs =
-      fun_graph
-      |> Enum.map(fn x -> {x, inf_types[x]} end)
+      funs_graph_asts # I'm using the fun_graph_asts because its ordered according to dependencies
+      |> Enum.map(fn {x, _ast} -> {x, inf_types[x]} end)
       # Remove functions that could not be inferred
       |> Enum.filter(fn {_, i} -> i != nil end)
 
     # Compiles all functions (both those passed as arguments and those used within the kernel) with the latest inferred types
-    comp =
-      Enum.map(
-        other_funs ++ funs,
-        fn f ->
-          JIT.compile_function(f)
-        end
-      )
+    all_funs = other_funs ++ funs
 
-    comp = Enum.reduce(comp, [], fn x, y -> y ++ x end)
+    # The JIT.compile_function/2 function compiles the provided function AND it's dependencies (other functions called within
+    # a function). To avoid recompiling functions that were already compiled, we provide a MapSet of already compiled functions,
+    # so the JIT.compile_function/2 can check and skip a function if necessary.
+    {comp, _compiled_funs} =
+      Enum.reduce(all_funs, {[], MapSet.new()}, fn fun, {code_acc, compiled_funs_acc} ->
+        {new_code, compiled_funs_acc} = JIT.compile_function(fun, compiled_funs_acc)
+        {code_acc ++ new_code, compiled_funs_acc}
+      end)
 
     # The `JIT.get_includes/0` function returns a list of OpenCL code that
     # will be prepended to the generated kernel code.
