@@ -422,24 +422,13 @@ defmodule JIT do
     end)
   end
 
-  # This sorting is very simplified and may not cover all cases, but it works most of the time
-  # Need to check with Du Bois if the algorithm needs to be improved
+  @doc """
+  Sorts the functions used within the kernel by their call graph, so that if a function A calls a function B, then B will be before A in the list.
+
+  Uses the CallGraphSorter module to perform a topological sort of the functions based on their call graph.
+  """
   def sort_functions_by_call_graph(funs_graph_asts) do
-    funs_graph_asts
-    |> Enum.sort(fn {f1, _ast1, funs1}, {f2, _ast2, funs2} ->
-      # If funs1 calls funs2, then funs1 should come after funs2 in the list (it depends on funs2)
-      if Enum.member?(funs1, f2) do
-        false
-      else
-        # If funs2 calls funs1, then funs2 should come after funs1 in the list
-        if Enum.member?(funs2, f1) do
-          true
-        else
-          # If neither calls the other, we can keep the order as is
-          true
-        end
-      end
-    end)
+    OCLPolyHok.CallGraphSorter.sort(funs_graph_asts)
   end
 
   @doc """
