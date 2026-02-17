@@ -468,7 +468,7 @@ defmodule OCLPolyHok.TypeInference do
               # If we cannot infer the type from the expression, then probably the variable is being assigned
               # to a function call whose return type is not yet inferred.
               # In this case, we call this function that infers the types of the function parameters.
-              infer_type_fun(map, exp)
+              map = infer_type_fun(map, exp)
 
               # Set variable type to :none for now, we'll try to infer it in later iterations
               Map.put(map, var, :none)
@@ -582,7 +582,10 @@ defmodule OCLPolyHok.TypeInference do
 
       # Anything else is ignored (all cases should be covered above, but just in case, we ignore anything that is not recognized as a command)
       {_str, _, _} ->
-        IO.puts("ic: Unrecognized command: #{Macro.to_string(code)}. Ignoring it for type inference.")
+        IO.puts(
+          "ic: Unrecognized command: #{Macro.to_string(code)}. Ignoring it for type inference."
+        )
+
         map
     end
   end
@@ -942,10 +945,11 @@ defmodule OCLPolyHok.TypeInference do
 
         if(type_fun == nil) do
           # If the type is unknown, we infer the type of the arguments
-          {map, infered_type} = infer_types_args(map, args, [])
+          {map, infered_types} = infer_types_args(map, args, [])
 
           # And we add the function to the map with return type :none and the inferred argument types as a list
-          map = Map.put(map, fun, {:none, infered_type})
+          map = Map.put(map, fun, {:none, infered_types})
+
           # Returns the updated map
           map
         else
