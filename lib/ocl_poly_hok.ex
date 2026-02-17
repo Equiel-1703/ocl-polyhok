@@ -435,13 +435,20 @@ defmodule OCLPolyHok do
     # the functions passed as arguments to the kernel, but only those used within the kernel that are not parameters.
     # This is good, because parameters functions may not exist yet at compile time (e.g. anonymous functions), an their types are
     # highly dependent on the context of the kernel execution, so they are better inferred later during the kernel inference.
-    funs_graph_asts = JIT.get_non_parameters_func_asts(fun_graph)
+    funs_graph_asts =
+      JIT.get_non_parameters_func_asts(fun_graph)
+      # Now we need to sort these functions in the correct order of inference
+      |> JIT.sort_functions_by_call_graph()
+      # Remove call graph from the sorted list, since we don't need it anymore
+      |> Enum.map(fn {fun, ast, _call_graph} -> {fun, ast} end)
 
-    # Infer the return and args types of all functions used in the kernel that are not passed as arguments
-    # based on their ASTs and add them to the delta map.
-    delta =
-      JIT.infer_device_functions_types(funs_graph_asts)
-      |> Enum.reduce(delta, fn {fun, types}, acc -> Map.put(acc, fun, types) end)
+    # We now infer the types of each function and get a new delta map that contains the function type signatures of each device function
+    new_delta = JIT.infer_device_functions_types(funs_graph_asts)
+
+    # Now we merge this new_dalta containing the type signatures of the device functions with the previous delta containing the types
+    # of the kernel parameters, so when we infer the types of the kernel, it can use both the types of the kernel parameters and the types
+    # of the device functions used within the kernel.
+    delta = Map.merge(delta, new_delta)
 
     # Infers the types of the kernel's variables and functions based on the AST and the new delta map
     inf_types =
@@ -482,7 +489,8 @@ defmodule OCLPolyHok do
     other_funs =
       fun_graph
       |> Enum.map(fn x -> {x, inf_types[x]} end)
-      |> Enum.filter(fn {_, i} -> i != nil end) # Remove functions that could not be inferred
+      # Remove functions that could not be inferred
+      |> Enum.filter(fn {_, i} -> i != nil end)
 
     # Compiles all functions (both those passed as arguments and those used within the kernel).
     comp =

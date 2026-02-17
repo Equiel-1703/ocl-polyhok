@@ -938,7 +938,7 @@ defmodule OCLPolyHok.TypeInference do
     case exp do
       {fun, _, args} when is_list(args) ->
         # Check if the function has a known type in the map
-        type_fun = Map.get(map, fun)
+        type_fun = get_function_type(map, fun)
 
         if(type_fun == nil) do
           # If the type is unknown, we infer the type of the arguments
