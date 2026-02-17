@@ -8,11 +8,15 @@ OCLPolyHok.defmodule TypeInferenceTests do
     return(sqrt(num * num))
   end
 
+  defd comp_num_2(num) do
+    return(comp_num(num) + 1.0)
+  end
+
   defk type_inference_ker(result_gpu_array, len) do
     index = get_global_id(0)
 
     if(index < len) do
-      foo = comp_num(index)
+      foo = comp_num_2(index)
 
       if foo > 0.0 do
         result_gpu_array[index] = 1.0
