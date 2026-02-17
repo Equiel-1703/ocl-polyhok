@@ -57,8 +57,9 @@ defmodule OCLPolyHok.TypeInference do
     logs_en = is_debug_logs_enabled?()
 
     if logs_en do
-      IO.puts("\n[TypeInference] Starting type inference iteration...")
+      IO.puts("\n========= [TypeInference] Starting type inference iteration =========")
       IO.puts("[TypeInference] Target function/kernel: #{inspect(f_name)}")
+      IO.inspect(map, label: "[TypeInference] Current types map before iteration")
     end
 
     # Check if the type server already contains a map for this function. If it does, then it means this function was processed before,
@@ -468,6 +469,9 @@ defmodule OCLPolyHok.TypeInference do
               # to a function call whose return type is not yet inferred.
               # In this case, we call this function that infers the types of the function parameters.
               infer_type_fun(map, exp)
+
+              # Set variable type to :none for now, we'll try to infer it in later iterations
+              Map.put(map, var, :none)
             end
 
           {map, var_type} ->
@@ -578,10 +582,8 @@ defmodule OCLPolyHok.TypeInference do
 
       # Anything else is ignored (all cases should be covered above, but just in case, we ignore anything that is not recognized as a command)
       {_str, _, _} ->
-        # IO.puts "yo"
-        # raise "Is #{str}  a command???"
+        IO.puts("ic: Unrecognized command: #{Macro.to_string(code)}. Ignoring it for type inference.")
         map
-        # string when is_string(string)) -> string #to_string(number)
     end
   end
 
@@ -746,15 +748,9 @@ defmodule OCLPolyHok.TypeInference do
       {op, _info, args} when op in [:+, :-, :/, :*] ->
         case args do
           [a1] ->
-            #   if(type != :int && type != :float) do
-            #    raise "Operaotr (-) (#{inspect info}) is being used in a context #{type}"
-            # end
             set_type_exp(map, type, a1)
 
           [a1, a2] ->
-            # if(type != :int && type != :float) do
-            # raise "Operaotr11 (#{inspect op}) (#{inspect info}) is being used in a context #{inspect type}"
-            # end
             t1 = find_type_exp(map, a1)
             t2 = find_type_exp(map, a2)
 
@@ -936,6 +932,10 @@ defmodule OCLPolyHok.TypeInference do
   # E.g: fun: {:none, [:int, :float]}
   defp infer_type_fun(map, exp) do
     case exp do
+      # Check if the expression is an operation, if it is, we simply return the map unchanged
+      {op, _, _args} when op in [:+, :-, :/, :*, :<=, :<, :>, :>=, :!=, :==, :!, :&&, :||] ->
+        map
+
       {fun, _, args} when is_list(args) ->
         # Check if the function has a known type in the map
         type_fun = get_function_type(map, fun)
