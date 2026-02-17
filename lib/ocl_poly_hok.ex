@@ -470,12 +470,12 @@ defmodule OCLPolyHok do
     subs = JIT.get_function_parameters(kast, l)
 
     # Compiles the kernel AST into a string representation of the OpenCL code. The inferred types are used
-    # to generate the correct OpenCL types for the kernel parameters. The `subs` map is used to replace
-    # function parameters with their actual names in the generated code.
+    # to generate the correct OpenCL types for all the kernel internal variables and parameters.
+    # The `subs` map is used to replace function parameters with their actual device function names in the generated code.
     kernel = JIT.compile_kernel(kast, inf_types, subs)
 
-    # Here we are getting a list of tuples {function_name, type} for all formal parameters that are functions.
-    # This is needed so we can compile correctly the functions that are passed as arguments to the kernel.
+    # Here we are getting a list of tuples {actual_function_param, type} for all formal parameters that are functions.
+    # This is needed because we will compile these functions and their type signatures will be used as their initial delta type map.
     funs = JIT.get_function_parameters_and_their_types(kast, l, inf_types)
 
     # Takes the function graph and the kernel final inferred types and creates a list of tuples where each tuple contains
@@ -490,10 +490,10 @@ defmodule OCLPolyHok do
       # Remove functions that could not be inferred
       |> Enum.filter(fn {_, i} -> i != nil end)
 
-    # Compiles all functions (both those passed as arguments and those used within the kernel).
+    # Compiles all functions (both those passed as arguments and those used within the kernel) with the latest inferred types
     comp =
       Enum.map(
-        funs ++ other_funs,
+        other_funs ++ funs,
         fn f ->
           JIT.compile_function(f)
         end
