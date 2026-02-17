@@ -439,8 +439,6 @@ defmodule OCLPolyHok do
       JIT.get_non_parameters_func_asts(fun_graph)
       # Now we need to sort these functions in the correct order of inference
       |> JIT.sort_functions_by_call_graph()
-      # Remove call graph from the sorted list, since we don't need it anymore
-      |> Enum.map(fn {fun, ast, _call_graph} -> {fun, ast} end)
 
     # We now infer the types of each function and get a new delta map that contains the function type signatures of each device function
     new_delta = JIT.infer_device_functions_types(funs_graph_asts)
