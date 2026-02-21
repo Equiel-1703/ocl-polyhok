@@ -1,13 +1,12 @@
 # OCL-PolyHok: An OpenCL backend for PolyHok
 
-The OCL-PolyHok project is an implementation of the [PolyHok DSL](https://github.com/ardubois/poly_hok) using OpenCL as the backend technology for parallel computing, instead of PolyHok's original CUDA backend.
+The OCL-PolyHok project is an extension of the [PolyHok DSL](https://github.com/ardubois/poly_hok) that uses OpenCL as the backend technology for parallel computing instead of CUDA.
 
 This implementation expands the compatible hardware range of PolyHok by leveraging OpenCL's ability to run accross various GPUs from different vendors.
 
 ## OCL-PolyHok Features
 
-- OpenCL backend for PolyHok DSL
-- Support for a wide range of GPUs
+- Support for a wide range of GPUs without losing PolyHok's high-level abstractions
 - Seamless integration with existing PolyHok codebases
 
 ## Prerequisites
@@ -22,18 +21,30 @@ To get started with OCL-PolyHok, first ensure you have the following prerequisit
   sudo apt install erlang-dev
   ```
 
-- **OpenCL 2.0 compatible hardware**
+- **OpenCL 2.0 compatible hardware**. Check your GPU specifications to ensure it supports OpenCL version 2.0 or higher.
 
-- **OpenCL C and C++ headers and development libraries**. On Debian/Ubuntu systems, you can install them via:
+- **OpenCL generic ICD loader and C/C++ headers**. You can install the necessary OpenCL packages using your package manager. For Debian/Ubuntu systems, you can use:
 
   ```bash
   sudo apt install ocl-icd-opencl-dev opencl-c-headers opencl-clhpp-headers
   ```
 
-  It is important to note that the above packages provide only the OpenCL headers and ICD loader. You will also need to install the appropriate OpenCL driver for your specific GPU hardware. For example, if you are using an NVIDIA GPU, you will need to install the NVIDIA OpenCL driver:
-  
+  **Note**: The packages listed above are for general OpenCL development in C/C++. You will need to ensure that your system has the latest drivers for your GPU. This ensures that the OpenCL ICD loader can find and route commands to the appropriate OpenCL driver provided by your GPU vendor. You can verify that OpenCL is properly set up on your system by using the `clinfo` tool, which provides detailed information about the OpenCL platforms and devices available on your system. This tool may not be installed by default in some Linux distributions, but you can easily install it using your package manager. For Debian/Ubuntu systems, you can run:
+
   ```bash
-  sudo apt-get install nvidia-opencl-dev
+  sudo apt install clinfo
+  ```
+
+  **Pro Tip**: OCL-PolyHok was developed and tested on a Lenovo IdeaPad 3 running Linux Mint 22.3 (Zena), equipped with an AMD Ryzen 5 5500U CPU and its integrated GPU, the AMD Lucienne. If you have a similar setup, we strongly recommend using the Mesa OpenCL driver, which works very well with AMD's iGPUs, and enabling the `rusticl` implementation (a modern OpenCL implementation written in Rust). You can install the Mesa OpenCL driver by running the following command:
+
+  ```bash
+  sudo apt install mesa-opencl-icd
+  ```
+
+  And to enable the `rusticl` implementation, set the `RUSTICL_ENABLE` environment variable to `radeonsi` in your shell configuration file (e.g., `~/.bashrc` or `~/.zshrc`):
+
+  ```bash
+  export RUSTICL_ENABLE='radeonsi'
   ```
 
 ## Getting Started
