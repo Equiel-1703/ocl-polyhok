@@ -29,9 +29,13 @@ To get started with OCL-PolyHok, first ensure you have the following prerequisit
   sudo apt install ocl-icd-opencl-dev opencl-c-headers opencl-clhpp-headers
   ```
 
-  **Note**: The packages listed above are for general OpenCL development in C/C++. You will need to ensure that your system has the latest drivers for your GPU, so the OpenCL ICD loader will be able to find and use the appropriate OpenCL implementation provided by your GPU vendor. You can verify that OpenCL is properly set up on your system by using the `clinfo` command, which provides detailed information about the OpenCL platforms and devices available on your system.
+  **Note**: The packages listed above are for general OpenCL development in C/C++. You will need to ensure that your system has the latest drivers for your GPU. This ensures that the OpenCL ICD loader can find and route commands to the appropriate OpenCL driver provided by your GPU vendor. You can verify that OpenCL is properly set up on your system by using the `clinfo` tool, which provides detailed information about the OpenCL platforms and devices available on your system. This tool may not be installed by default in some Linux distributions, but you can easily install it using your package manager. For Debian/Ubuntu systems, you can run:
 
-  **Pro Tip**: The OCL-PolyHok was developed and tested on a Lenovo IdeaPad 3 with an AMD Ryzen 5 5500U CPU and its integrated GPU, the AMD Lucienne. If you have a similar setup, we strongly recommend using the Mesa OpenCL driver, which works very well with AMD's iGPUs, and enabling the `rusticl` implementation (a modern OpenCL implementation written in Rust). You can install the Mesa OpenCL driver running the following command:
+  ```bash
+  sudo apt install clinfo
+  ```
+
+  **Pro Tip**: OCL-PolyHok was developed and tested on a Lenovo IdeaPad 3 running Linux Mint 22.3 (Zena), equipped with an AMD Ryzen 5 5500U CPU and its integrated GPU, the AMD Lucienne. If you have a similar setup, we strongly recommend using the Mesa OpenCL driver, which works very well with AMD's iGPUs, and enabling the `rusticl` implementation (a modern OpenCL implementation written in Rust). You can install the Mesa OpenCL driver by running the following command:
 
   ```bash
   sudo apt install mesa-opencl-icd
