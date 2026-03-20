@@ -7,6 +7,7 @@ This implementation expands the compatible hardware range of PolyHok by leveragi
 ## OCL-PolyHok Features
 
 - Support for a wide range of GPUs without losing PolyHok's high-level abstractions
+- Supports both CUDA and OpenCL syntax style for indexing
 - Seamless integration with existing PolyHok codebases
 
 ## Prerequisites
