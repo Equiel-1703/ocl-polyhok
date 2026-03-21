@@ -134,7 +134,7 @@ static void unload(ErlNifEnv * /* env */, void * /* priv_data */)
 static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
   // Check argc
-  if (argc != 7)
+  if (argc != 8)
   {
     std::cerr << "[ERROR] Invalid number of arguments for jit_compile_and_launch_nif." << std::endl;
     return enif_make_badarg(env);
@@ -148,8 +148,8 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
     return enif_make_badarg(env);
   }
 
-  char kernel_name[size_name + 1];
-  enif_get_string(env, e_name, kernel_name, size_name + 1, ERL_NIF_LATIN1);
+  std::string kernel_name(size_name + 1, '\0');
+  enif_get_string(env, e_name, kernel_name.data(), size_name + 1, ERL_NIF_LATIN1);
 
   // Get kernel code to compile
   ERL_NIF_TERM e_code = argv[1];
@@ -159,8 +159,8 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
     return enif_make_badarg(env);
   }
 
-  char code[size_code + 1];
-  enif_get_string(env, e_code, code, size_code + 1, ERL_NIF_LATIN1);
+  std::string code(size_code + 1, '\0');
+  enif_get_string(env, e_code, code.data(), size_code + 1, ERL_NIF_LATIN1);
 
   // Creating program and kernel objects
   cl::Program program;
@@ -169,7 +169,7 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
   try
   {
     program = open_cl->createProgram(code);
-    kernel = open_cl->createKernel(program, kernel_name);
+    kernel = open_cl->createKernel(program, kernel_name.c_str());
   }
   catch (const std::exception &e)
   {
@@ -186,9 +186,21 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
     return enif_make_badarg(env);
   }
 
+  if (arity != 3)
+  {
+    std::cerr << "[ERROR] The blocks and threads tuples must have exactly 3 elements (for x, y, z dimensions)." << std::endl;
+    return enif_make_badarg(env);
+  }
+
   if (!enif_get_tuple(env, argv[3], &arity, &tuple_threads))
   {
     std::cerr << "[ERROR] The given threads argument is not a tuple." << std::endl;
+    return enif_make_badarg(env);
+  }
+
+  if (arity != 3)
+  {
+    std::cerr << "[ERROR] The blocks and threads tuples must have exactly 3 elements (for x, y, z dimensions)." << std::endl;
     return enif_make_badarg(env);
   }
 
@@ -665,7 +677,7 @@ static ERL_NIF_TERM double_supported_nif(ErlNifEnv *env, int /* argc */, const E
 }
 
 static ErlNifFunc nif_funcs[] = {
-    {.name = "jit_compile_and_launch_nif", .arity = 7, .fptr = jit_compile_and_launch_nif, .flags = 0},
+    {.name = "jit_compile_and_launch_nif", .arity = 8, .fptr = jit_compile_and_launch_nif, .flags = 0},
     {.name = "new_gpu_array_nif", .arity = 3, .fptr = new_gpu_array_nif, .flags = 0},
     {.name = "get_gpu_array_nif", .arity = 4, .fptr = get_gpu_array_nif, .flags = 0},
     {.name = "create_gpu_array_nx_nif", .arity = 4, .fptr = create_gpu_array_nx_nif, .flags = 0},

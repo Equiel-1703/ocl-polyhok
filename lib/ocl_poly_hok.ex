@@ -411,8 +411,9 @@ defmodule OCLPolyHok do
     - `t`: The work group size in each dimension (a.k.a number of blocks).
     - `b`: A list containing the number of work items in each dimension (a.k.a threads per block).
     - `l`: A list of arguments to be passed to the kernel.
+    - `d`: An atom indicating the device to be used for execution. The values accepted are `:gpu` and `:cpu`. The default value is `:gpu`.
   """
-  def spawn(k, t, b, l) do
+  def spawn(k, t, b, l, d \\ :gpu) when d in [:gpu, :cpu] do
     # Get kernel name from the kernel function reference.
     kernel_name = JIT.get_kernel_name(k)
 
@@ -538,7 +539,8 @@ defmodule OCLPolyHok do
       b,
       length(args),
       types_args,
-      args
+      args,
+      d
     )
   end
 
@@ -589,7 +591,7 @@ defmodule OCLPolyHok do
     raise "NIF syncronize_nif/0 not implemented"
   end
 
-  def jit_compile_and_launch_nif(_n, _k, _t, _b, _size, _types, _l) do
-    raise "NIF jit_compile_and_launch_nif/7 not implemented"
+  def jit_compile_and_launch_nif(_n, _k, _t, _b, _size, _types, _l, _d) do
+    raise "NIF jit_compile_and_launch_nif/8 not implemented"
   end
 end
