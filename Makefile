@@ -12,7 +12,7 @@ BMP_DEPENDENCIES = $(C_SRC_DIR)/bmp/BMP.cpp
 BMP_HEADER_DEPENDENCIES = $(C_SRC_DIR)/bmp/BMP.hpp
 
 CXX = g++
-CXXFLAGS = -shared -fPIC -Wall -Wextra -std=c++17
+CXXFLAGS = -shared -fPIC -Wall -Wextra -std=c++11
 LINKFLAGS = -lOpenCL
 
 all: $(TARGET)
