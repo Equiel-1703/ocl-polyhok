@@ -50,7 +50,7 @@ To get started with OCL-PolyHok, first ensure you have the following prerequisit
 
 ## Getting Started
 
-Once you have the prerequisites, follow these steps to set up the project:
+Once you have the prerequisites, follow these steps to set up and compile the project:
 
 1. Clone the repository and navigate to the project directory:
 
@@ -65,11 +65,12 @@ Once you have the prerequisites, follow these steps to set up the project:
     mix deps.get
     ```
 
-3. Compile C++ NIFS for OpenCL and BMP generation:
+3. Generate build scritps and compile the C++ NIFS for OCL-PolyHok's OpenCL runtime and BMP generation:
 
     ```bash
-    make all
-    make bmp
+    mkdir CMake
+    cmake -S . -B CMake
+    cmake --build CMake
     ```
 
 4. Compile the Elixir project:
