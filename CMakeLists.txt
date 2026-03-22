@@ -77,10 +77,13 @@ set_target_properties(bmp_nifs PROPERTIES PREFIX "")
 
 # ---- Copy the generated shared libraries to the 'priv' folder after building ----
 add_custom_command(TARGET gpu_nifs POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/priv
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:gpu_nifs> ${CMAKE_SOURCE_DIR}/priv/
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/priv"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:gpu_nifs>" "${CMAKE_SOURCE_DIR}/priv/$<TARGET_FILE_NAME:gpu_nifs>"
+    COMMENT "Copying gpu_nifs to priv/ directory..."
 )
+
 add_custom_command(TARGET bmp_nifs POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/priv
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:bmp_nifs> ${CMAKE_SOURCE_DIR}/priv/
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/priv"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:bmp_nifs>" "${CMAKE_SOURCE_DIR}/priv/$<TARGET_FILE_NAME:bmp_nifs>"
+    COMMENT "Copying bmp_nifs to priv/ directory..."
 )

@@ -34,3 +34,4 @@ ocl-polyhok-polyhok-script.sh
 
 # Ignore CMake build files
 build/
+CMake/
