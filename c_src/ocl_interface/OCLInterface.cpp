@@ -221,6 +221,8 @@ cl::Kernel OCLInterface::createKernel(const cl::Program &program, const char *ke
         std::cerr << "[OCL C++ Interface] Failed to create OpenCL kernel '" << kernel_name << "'." << std::endl;
         std::cerr << "> Error code: " << e.err() << std::endl;
         std::cerr << "> Error message: " << e.what() << std::endl;
+
+        throw std::runtime_error("Failed to create OpenCL kernel");
     }
 }
 
