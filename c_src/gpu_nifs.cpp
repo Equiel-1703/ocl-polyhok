@@ -84,7 +84,7 @@ void init_ocl(ErlNifEnv *env)
     }
 
     // Add ignore warnings build option (regardless of double support) in the GPU
-    open_cl->setBuildOptions(open_cl->getBuildOptions() + " -w", OCLInterface::DeviceType::GPU);
+    open_cl->setBuildOptions(open_cl->getBuildOptions(OCLInterface::DeviceType::GPU) + " -w", OCLInterface::DeviceType::GPU);
   }
   catch (const std::exception &e)
   {
