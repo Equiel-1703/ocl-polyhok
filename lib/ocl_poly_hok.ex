@@ -115,6 +115,58 @@ defmodule OCLPolyHok do
     ast_new_module
   end
 
+  # ----------------- With Macro ------------------
+  defmacro with(ctx, do: body) do
+    IO.puts("Received body in macro:\n\n#{Macro.to_string(body)}\n")
+
+    new_body = process_with_body(body, ctx)
+
+    IO.puts("New body:\n\n#{Macro.to_string(new_body)}\n")
+
+    quote do
+      IO.puts("Working on context of device: #{unquote(ctx).device}")
+
+      # Returning the new modified body
+      unquote(new_body)
+    end
+  end
+
+  # == Helper functions of with macro ==
+  defp process_with_body({:__block__, _, commands}, ctx) do
+    new_commands = Enum.map(commands, fn command -> process_with_command(command, ctx) end)
+    {:__block__, [], new_commands}
+  end
+
+  defp process_with_body(command, ctx) do
+    process_with_command(command, ctx)
+  end
+
+  defp process_with_command(c, ctx) do
+    IO.inspect(c, label: "Processing command")
+
+    new_c =
+      case c do
+        {:=, _, [left, right]} -> {:=, [], [left, process_with_exp(right, ctx)]}
+        _ -> process_with_exp(c, ctx)
+      end
+
+    new_c
+  end
+
+  defp process_with_exp(exp, ctx) do
+    new_exp =
+      case exp do
+        {{:., _, [{:__aliases__, _, [:OCLPolyHok]}, fun_name]}, _, args} ->
+          IO.inspect({fun_name, args}, label: "Processing function")
+          {{:., [], [{:__aliases__, [], [:OCLPolyHok]}, fun_name]}, [], [ctx | args]}
+
+        _ ->
+          exp
+      end
+
+    new_exp
+  end
+
   # ----------------- Synchronize function -----------------
 
   def synchronize() do
@@ -128,32 +180,33 @@ defmodule OCLPolyHok do
     set_debug_logs_nif(enable)
   end
 
-  # ----------------- GPU NX Array functions -----------------
+  # ----------------- GPU NX miscellaneous functions -----------------
 
-  def get_type_gnx({:nx, type, _shape, _name, _ref}) do
-    type
+  def get_type_gnx(_ctx, {{:nx, type, _shape, _name, _ref}, _gnx_ctx}), do: type
+
+  def get_type_gnx({{:nx, type, _shape, _name, _ref}, _gnx_ctx}), do: type
+
+  def get_type(%Nx.Tensor{type: type}), do: type
+
+  def get_shape_gnx(_ctx, {{:nx, _type, shape, _name, _ref}, _gnx_ctx}), do: shape
+
+  def get_shape_gnx({{:nx, _type, shape, _name, _ref}, _gnx_ctx}), do: shape
+
+  def get_shape(%Nx.Tensor{shape: shape}), do: shape
+
+  # ===== Context Initializers -- based on MONAD pattern =====
+  def cpu() do
+    %OCLPolyHok.Context{device: :cpu}
   end
 
-  def get_type({:nx, type, _shape, _name, _ref}) do
-    type
+  def gpu() do
+    %OCLPolyHok.Context{device: :gpu}
   end
 
-  def get_type(%Nx.Tensor{type: type}) do
-    type
-  end
+  # ------- New GPU NX Functions -------
 
-  def get_shape_gnx({:nx, _type, shape, _name, _ref}) do
-    shape
-  end
-
-  def get_shape({:nx, _type, shape, _name, _ref}) do
-    shape
-  end
-
-  def new_gnx(%Nx.Tensor{data: data, type: type, shape: shape, names: name}) do
-    %Nx.BinaryBackend{state: array} = data
-    # IO.inspect name
-    # raise "hell"
+  # == Helper functions for new_gnx
+  defp new_gnx_from_tensor(array, type, shape, name, device) do
     {l, c} =
       case shape do
         {c} -> {1, c}
@@ -163,71 +216,71 @@ defmodule OCLPolyHok do
 
     ref =
       case type do
-        {:f, 32} -> create_gpu_array_nx_nif(array, l, c, Kernel.to_charlist("float"))
-        {:f, 64} -> create_gpu_array_nx_nif(array, l, c, Kernel.to_charlist("double"))
-        {:s, 32} -> create_gpu_array_nx_nif(array, l, c, Kernel.to_charlist("int"))
-        x -> raise "new_gnx: type #{x} not suported"
+        {:f, 32} -> new_array_from_nx_nif(array, l, c, Kernel.to_charlist("float"), device)
+        {:f, 64} -> new_array_from_nx_nif(array, l, c, Kernel.to_charlist("double"), device)
+        {:s, 32} -> new_array_from_nx_nif(array, l, c, Kernel.to_charlist("int"), device)
+        x -> raise "new_gnx: type #{inspect(x)} not suported"
       end
 
     {:nx, type, shape, name, ref}
   end
 
-  def new_gnx(l, c, type) do
-    # IO.puts "aque"
-    ref =
-      case type do
-        {:f, 32} -> new_gpu_array_nif(l, c, Kernel.to_charlist("float"))
-        {:f, 64} -> new_gpu_array_nif(l, c, Kernel.to_charlist("double"))
-        {:s, 32} -> new_gpu_array_nif(l, c, Kernel.to_charlist("int"))
-        x -> raise "new_gnx: type #{x} not suported"
+  defp new_gnx_empty(shape, type, device) do
+    {l, c} =
+      case shape do
+        {c} -> {1, c}
+        {l, c} -> {l, c}
+        {l1, l2, c} -> {l1 * l2, c}
       end
-
-    {:nx, type, {l, c}, [nil, nil], ref}
-  end
-
-  def new_gnx({c}, type) do
-    l = 1
-    # IO.puts "aque"
-    ref =
-      case type do
-        {:f, 32} -> new_gpu_array_nif(l, c, Kernel.to_charlist("float"))
-        {:f, 64} -> new_gpu_array_nif(l, c, Kernel.to_charlist("double"))
-        {:s, 32} -> new_gpu_array_nif(l, c, Kernel.to_charlist("int"))
-        x -> raise "new_gnx: type #{x} not suported"
-      end
-
-    {:nx, type, {c}, [nil], ref}
-  end
-
-  def new_gnx({l, c}, type) do
-    # IO.puts "aque"
-    ref =
-      case type do
-        {:f, 32} -> new_gpu_array_nif(l, c, Kernel.to_charlist("float"))
-        {:f, 64} -> new_gpu_array_nif(l, c, Kernel.to_charlist("double"))
-        {:s, 32} -> new_gpu_array_nif(l, c, Kernel.to_charlist("int"))
-        x -> raise "new_gnx: type #{x} not suported"
-      end
-
-    {:nx, type, {l, c}, [nil, nil], ref}
-  end
-
-  def new_gnx({d1, d2, d3}, type) do
-    {l, c} = {d1 * d2, d3}
 
     ref =
       case type do
-        {:f, 32} -> new_gpu_array_nif(l, c, Kernel.to_charlist("float"))
-        {:f, 64} -> new_gpu_array_nif(l, c, Kernel.to_charlist("double"))
-        {:s, 32} -> new_gpu_array_nif(l, c, Kernel.to_charlist("int"))
-        x -> raise "new_gnx: type #{x} not suported"
+        {:f, 32} -> new_empy_array_nif(l, c, Kernel.to_charlist("float"), device)
+        {:f, 64} -> new_empy_array_nif(l, c, Kernel.to_charlist("double"), device)
+        {:s, 32} -> new_empy_array_nif(l, c, Kernel.to_charlist("int"), device)
+        x -> raise "new_gnx: type #{inspect(x)} not suported"
       end
 
-    {:nx, type, {d1, d2, d3}, [nil, nil, nil], ref}
+    {:nx, type, shape, [nil], ref}
   end
 
-  def get_gnx({:nx, type, shape, name, ref}) do
-    # IO.puts "aqui..."
+  # == New from nx tensor
+  def new_gnx(
+        %OCLPolyHok.Context{} = ctx,
+        %Nx.Tensor{
+          data: data,
+          type: type,
+          shape: shape,
+          names: name
+        }
+      ) do
+    %Nx.BinaryBackend{state: array} = data
+
+    gnx = new_gnx_from_tensor(array, type, shape, name, ctx.device)
+
+    {gnx, ctx}
+  end
+
+  # == New empty gnx
+  def new_gnx(%OCLPolyHok.Context{} = ctx, shape, type) do
+    gnx = new_gnx_empty(shape, type, ctx.device)
+
+    {gnx, ctx}
+  end
+
+  # ------- Function to retrieve device arrays (gnx) back to Elixir -------
+  def get_gnx(
+        %OCLPolyHok.Context{} = ctx,
+        {{:nx, type, shape, name, ref}, %OCLPolyHok.Context{} = gnx_ctx}
+      ) do
+    cond do
+      gnx_ctx.device == ctx.device ->
+        :ok
+
+      true ->
+        raise "Device mismatch: the current context is from device '#{ctx.device}', but the provided GNx argument is in a context with device '#{gnx_ctx.device}'. GNx = #{inspect({:nx, type, shape, name, ref})}"
+    end
+
     {l, c} =
       case shape do
         {c} -> {1, c}
@@ -237,10 +290,10 @@ defmodule OCLPolyHok do
 
     ref =
       case type do
-        {:f, 32} -> get_gpu_array_nif(ref, l, c, Kernel.to_charlist("float"))
-        {:f, 64} -> get_gpu_array_nif(ref, l, c, Kernel.to_charlist("double"))
-        {:s, 32} -> get_gpu_array_nif(ref, l, c, Kernel.to_charlist("int"))
-        x -> raise "new_gnx: type #{x} not suported"
+        {:f, 32} -> get_device_array_nif(ref, l, c, Kernel.to_charlist("float"), ctx.device)
+        {:f, 64} -> get_device_array_nif(ref, l, c, Kernel.to_charlist("double"), ctx.device)
+        {:s, 32} -> get_device_array_nif(ref, l, c, Kernel.to_charlist("int"), ctx.device)
+        x -> raise "get_gnx: type #{inspect(x)} not suported"
       end
 
     %Nx.Tensor{data: %Nx.BinaryBackend{state: ref}, type: type, shape: shape, names: name}
@@ -261,7 +314,6 @@ defmodule OCLPolyHok do
   end
 
   # ----------------- Helper functions for new_nx_from_function -----------------
-
   defp new_matrix_from_function_d(0, _, accumulator), do: accumulator
 
   defp new_matrix_from_function_d(size, function, accumulator),
@@ -407,15 +459,34 @@ defmodule OCLPolyHok do
 
   ## Parameters
 
+    - `ctx`: The OCLPolyHok context containing the device information.
     - `k`: The kernel function to be compiled and executed.
     - `t`: The work group size in each dimension (a.k.a number of blocks).
     - `b`: A list containing the number of work items in each dimension (a.k.a threads per block).
     - `l`: A list of arguments to be passed to the kernel.
-    - `d`: An atom indicating the device to be used for execution. The values accepted are `:gpu` and `:cpu`. The default value is `:gpu`.
   """
-  def spawn(k, t, b, l, d \\ :gpu) when d in [:gpu, :cpu] do
+  def spawn(%OCLPolyHok.Context{} = ctx, k, t, b, l) do
     # Get kernel name from the kernel function reference.
     kernel_name = JIT.get_kernel_name(k)
+
+    # Inspect GNx arguments for the kernel to ensure there is no device mismatch.
+    # If a GNx argument is in a different context (device) than the current kernel context, an error is raised.
+    l =
+      Enum.map(l, fn el ->
+        case el do
+          {{:nx, _, _, _, _} = gnx, %OCLPolyHok.Context{} = gnx_ctx} ->
+            cond do
+              gnx_ctx.device == ctx.device ->
+                gnx
+
+              true ->
+                raise "Device mismatch: the kernel is being executed in a context with device '#{ctx.device}', but one of the provided GNx argument is in a context with device '#{gnx_ctx.device}'. GNx = #{inspect(gnx)}"
+            end
+
+          _ ->
+            el
+        end
+      end)
 
     # Load, from the module_server, the AST and function graph for the kernel.
     {kast, fun_graph} =
@@ -485,8 +556,9 @@ defmodule OCLPolyHok do
     # The kernel final inferred types contains the inferred types of these functions because during the kernel type inference
     # their type is updated. So if the type was incomplete before (e.g. just the return type was inferred), by the end of the kernel
     # inference their type should be complete (return type and args types) =D
+    # I'm using the fun_graph_asts because its ordered according to dependencies
     other_funs =
-      funs_graph_asts # I'm using the fun_graph_asts because its ordered according to dependencies
+      funs_graph_asts
       |> Enum.map(fn {x, _ast} -> {x, inf_types[x]} end)
       # Remove functions that could not be inferred
       |> Enum.filter(fn {_, i} -> i != nil end)
@@ -540,7 +612,7 @@ defmodule OCLPolyHok do
       length(args),
       types_args,
       args,
-      d
+      ctx.device
     )
   end
 
@@ -575,16 +647,16 @@ defmodule OCLPolyHok do
     raise "NIF double_supported_nif/0 not implemented"
   end
 
-  def new_gpu_array_nif(_l, _c, _type) do
-    raise "NIF new_gpu_array_nif/4 not implemented"
+  def new_empy_array_nif(_l, _c, _type, _d) do
+    raise "NIF new_empy_array_nif/4 not implemented"
   end
 
-  def get_gpu_array_nif(_matrex, _l, _c, _type) do
-    raise "NIF get_gpu_array_nif/4 not implemented"
+  def get_device_array_nif(_gnx, _l, _c, _type, _d) do
+    raise "NIF get_device_array_nif/5 not implemented"
   end
 
-  def create_gpu_array_nx_nif(_matrex, _l, _c, _type) do
-    raise "NIF create_gpu_array_nx_nif/4 not implemented"
+  def new_array_from_nx_nif(_gnx, _l, _c, _type, _d) do
+    raise "NIF new_array_from_nx_nif/5 not implemented"
   end
 
   def synchronize_nif() do
