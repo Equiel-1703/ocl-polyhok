@@ -1,4 +1,5 @@
 #include "OCLInterface.hpp"
+#include <signal.h>
 
 OCLInterface::OCLInterface() : OCLInterface(false) {}
 
@@ -6,21 +7,32 @@ OCLInterface::OCLInterface(bool enable_debug_logs)
 {
     // Initialize OpenCL interface with null pointers for
     // for good error handling and predictable behavior
-    this->selected_platform = nullptr;
-    this->selected_device = nullptr;
-    this->context = nullptr;
-    this->command_queue = nullptr;
 
-    this->build_options = "";
+    this->gpu_platform = nullptr;
+    this->gpu = nullptr;
+    this->gpu_context = nullptr;
+    this->gpu_command_queue = nullptr;
+
+    this->cpu_platform = nullptr;
+    this->cpu = nullptr;
+    this->cpu_context = nullptr;
+    this->cpu_command_queue = nullptr;
+
+    this->build_options_gpu = "";
     this->debug_logs = enable_debug_logs;
 }
 
 OCLInterface::~OCLInterface()
 {
     // Clean up OpenCL resources if they were created
-    if (this->command_queue() != nullptr)
+    if (this->gpu_command_queue() != nullptr)
     {
-        this->command_queue.finish();
+        this->gpu_command_queue.finish();
+    }
+
+    if (this->cpu_command_queue() != nullptr)
+    {
+        this->cpu_command_queue.finish();
     }
 }
 
@@ -29,16 +41,7 @@ void OCLInterface::setDebugLogs(bool enable)
     this->debug_logs = enable;
 }
 
-void OCLInterface::createContext()
-{
-    this->context = cl::Context(this->selected_device);
-}
-
-void OCLInterface::createCommandQueue()
-{
-    this->command_queue = cl::CommandQueue(this->context, this->selected_device);
-}
-
+// This function is deprecated.
 std::string OCLInterface::getKernelCode(const char *file_name)
 {
     std::ifstream kernel_file(file_name);
@@ -60,93 +63,72 @@ std::string OCLInterface::getKernelCode(const char *file_name)
     return output;
 }
 
-std::vector<cl::Platform> OCLInterface::getAvailablePlatforms()
+void OCLInterface::selectPlatformsAndDevices()
 {
+    // Getting available OpenCL platforms
     std::vector<cl::Platform> platforms;
-
     cl::Platform::get(&platforms);
 
-    return platforms;
-}
+    // Now we can iterate over the platforms and look for GPU and CPU devices.
+    // I'll be selecting the first GPU and CPU devices I find, but we could implement something more robust in the future.
 
-void OCLInterface::selectPlatform(cl::Platform p)
-{
-    if (p() == nullptr)
-    {
-        throw std::runtime_error("Invalid OpenCL platform selected");
-    }
-
-    this->selected_platform = p;
-
-    if (this->debug_logs)
-    {
-        std::cout << "[OCL C++ Interface] Selected OpenCL platform: " << this->selected_platform.getInfo<CL_PLATFORM_NAME>() << std::endl;
-    }
-}
-
-void OCLInterface::selectDefaultPlatform()
-{
-    std::vector<cl::Platform> platforms = this->getAvailablePlatforms();
-
-    if (platforms.empty())
-    {
-        throw std::runtime_error("No OpenCL platforms found");
-    }
-
-    this->selectPlatform(platforms[0]);
-}
-
-std::vector<cl::Device> OCLInterface::getAvailableDevices(cl_device_type device_type)
-{
-    if (this->selected_platform() == nullptr)
-    {
-        throw std::runtime_error("No OpenCL platform selected");
-    }
-
+    bool gpu_found = false, cpu_found = false;
     std::vector<cl::Device> devices;
-    this->selected_platform.getDevices(device_type, &devices);
 
-    return devices;
+    for (auto &p : platforms)
+    {
+        devices.clear();
+        p.getDevices(CL_DEVICE_TYPE_ALL, &devices);
+
+        // Iterating over devices of the current platform p
+        for (auto &d : devices)
+        {
+            cl_device_type d_type = d.getInfo<CL_DEVICE_TYPE>();
+
+            if (d_type == CL_DEVICE_TYPE_GPU && !gpu_found)
+            {
+                this->gpu_platform = p;
+                this->gpu = d;
+                gpu_found = true;
+            }
+            else if (d_type == CL_DEVICE_TYPE_CPU && !cpu_found)
+            {
+                this->cpu_platform = p;
+                this->cpu = d;
+                cpu_found = true;
+            }
+        }
+
+        if (gpu_found && cpu_found)
+        {
+            break;
+        }
+    }
+
+    if (!cpu_found || !gpu_found)
+    {
+        std::cerr << "[OCL C++ Interface] Error: Unable to find both a GPU and a CPU device on the available OpenCL platforms." << std::endl;
+        std::cerr << "> GPU found: " << (gpu_found ? "Yes" : "No") << std::endl;
+        std::cerr << "> CPU found: " << (cpu_found ? "Yes" : "No") << std::endl;
+
+        throw std::runtime_error("Required OpenCL devices not found");
+    }
+
+    // ---- for debug only, remove this stuff later ----
+    std::cout << "Selected GPU: " << this->gpu.getInfo<CL_DEVICE_NAME>() << " from platform " << this->gpu_platform.getInfo<CL_PLATFORM_NAME>() << std::endl;
+    std::cout << "Selected CPU: " << this->cpu.getInfo<CL_DEVICE_NAME>() << " from platform " << this->cpu_platform.getInfo<CL_PLATFORM_NAME>() << std::endl;
+
+    // Creating contexts and command queues for the selected devices
+    this->gpu_context = cl::Context(this->gpu);
+    this->gpu_command_queue = cl::CommandQueue(this->gpu_context, this->gpu);
+
+    this->cpu_context = cl::Context(this->cpu);
+    this->cpu_command_queue = cl::CommandQueue(this->cpu_context, this->cpu);
 }
 
-void OCLInterface::selectDevice(cl::Device d)
+std::vector<std::pair<std::string, bool>> OCLInterface::checkDeviceExtensions(std::vector<std::string> &extensions, OCLInterface::DeviceType device_type)
 {
-    if (d() == nullptr)
-    {
-        throw std::runtime_error("Invalid OpenCL device selected");
-    }
-
-    this->selected_device = d;
-
-    this->createContext();
-    this->createCommandQueue();
-
-    if (this->debug_logs)
-    {
-        std::cout << "[OCL C++ Interface] Selected OpenCL device: " << this->selected_device.getInfo<CL_DEVICE_NAME>() << std::endl;
-    }
-}
-
-void OCLInterface::selectDefaultDevice(cl_device_type device_type)
-{
-    std::vector<cl::Device> devices = this->getAvailableDevices(device_type);
-
-    if (devices.empty())
-    {
-        throw std::runtime_error("No OpenCL devices found");
-    }
-
-    this->selectDevice(devices[0]);
-}
-
-std::vector<std::pair<std::string, bool>> OCLInterface::checkDeviceExtensions(std::vector<std::string> &extensions)
-{
-    if (this->selected_device() == nullptr)
-    {
-        throw std::runtime_error("No OpenCL device selected");
-    }
-
-    std::string device_extensions = this->selected_device.getInfo<CL_DEVICE_EXTENSIONS>();
+    std::string device_extensions = (device_type == DeviceType::GPU) ? this->gpu.getInfo<CL_DEVICE_EXTENSIONS>() : this->cpu.getInfo<CL_DEVICE_EXTENSIONS>();
     std::vector<std::pair<std::string, bool>> results;
 
     for (const auto &ext : extensions)
@@ -158,23 +140,33 @@ std::vector<std::pair<std::string, bool>> OCLInterface::checkDeviceExtensions(st
     return results;
 }
 
-void OCLInterface::setBuildOptions(const std::string &options)
+void OCLInterface::setBuildOptions(const std::string &options, OCLInterface::DeviceType device_type)
 {
-    this->build_options = options;
+    if (device_type == DeviceType::GPU)
+    {
+        this->build_options_gpu = options;
+    }
+    else
+    {
+        this->build_options_cpu = options;
+    }
 
     if (this->debug_logs)
     {
-        std::cout << "[OCL C++ Interface] Set OpenCL build options: " << this->build_options << std::endl;
+        std::cout << "[OCL C++ Interface] Set OpenCL build options to " << (device_type == DeviceType::GPU ? "GPU" : "CPU") << ": " << options << std::endl;
     }
 }
 
-cl::Program OCLInterface::createProgram(std::string &program_code)
+cl::Program OCLInterface::createProgram(std::string &program_code, OCLInterface::DeviceType device_type)
 {
-    cl::Program program(this->context, program_code);
+    cl::Context &context = (device_type == DeviceType::GPU) ? this->gpu_context : this->cpu_context;
+    cl::Device &device = (device_type == DeviceType::GPU) ? this->gpu : this->cpu;
+
+    cl::Program program(context, program_code);
 
     try
     {
-        program.build(this->selected_device, this->build_options.c_str());
+        program.build(device, this->build_options_gpu.c_str());
     }
     catch (const cl::BuildError &err)
     {
@@ -199,46 +191,52 @@ cl::Program OCLInterface::createProgram(std::string &program_code)
     return program;
 }
 
-cl::Program OCLInterface::createProgram(const char *program_code)
+cl::Program OCLInterface::createProgram(const char *program_code, OCLInterface::DeviceType device_type)
 {
     std::string code_str(program_code);
-    return this->createProgram(code_str);
+    return this->createProgram(code_str, device_type);
 }
 
-cl::Program OCLInterface::createProgramFromFile(const char *file_name)
+cl::Program OCLInterface::createProgramFromFile(const char *file_name, OCLInterface::DeviceType device_type)
 {
     std::string code_str = this->getKernelCode(file_name);
-    return this->createProgram(code_str);
+    return this->createProgram(code_str, device_type);
 }
 
 cl::Kernel OCLInterface::createKernel(const cl::Program &program, const char *kernel_name)
 {
-    cl_int err = CL_SUCCESS;
-    cl::Kernel kernel(program, kernel_name, &err);
-
-    if (err != CL_SUCCESS || kernel() == nullptr)
-    {
-        std::cerr << "[OCL C++ Interface] Failed to create OpenCL kernel '" << kernel_name << "'. Error code: " << err << std::endl;
-        throw std::runtime_error("Failed to create OpenCL kernel");
-    }
-
-    if (this->debug_logs)
-    {
-        std::cout << "[OCL C++ Interface] OpenCL kernel '" << kernel_name << "' created successfully." << std::endl;
-    }
-
-    return kernel;
-}
-
-cl::Buffer OCLInterface::createBuffer(size_t size, cl_mem_flags flags, void *host_ptr)
-{
     try
     {
-        cl::Buffer buffer(this->context, flags, size, host_ptr);
+        cl::Kernel kernel(program, kernel_name);
 
         if (this->debug_logs)
         {
-            std::cout << "[OCL C++ Interface] OpenCL buffer of size " << size << " created successfully." << std::endl;
+            std::cout << "[OCL C++ Interface] OpenCL kernel '" << kernel_name << "' created successfully." << std::endl;
+        }
+
+        return kernel;
+    }
+    catch (const cl::Error &e)
+    {
+        std::cerr << "[OCL C++ Interface] Failed to create OpenCL kernel '" << kernel_name << "'." << std::endl;
+        std::cerr << "> Error code: " << e.err() << std::endl;
+        std::cerr << "> Error message: " << e.what() << std::endl;
+    }
+}
+
+cl::Buffer OCLInterface::createBuffer(size_t size, cl_mem_flags flags, OCLInterface::DeviceType device_type, void *host_ptr)
+{
+    cl::Context &context = (device_type == DeviceType::GPU) ? this->gpu_context : this->cpu_context;
+    cl::Device &device = (device_type == DeviceType::GPU) ? this->gpu : this->cpu;
+    std::string device_type_str = (device_type == DeviceType::GPU) ? "GPU" : "CPU";
+
+    try
+    {
+        cl::Buffer buffer(context, flags, size, host_ptr);
+
+        if (this->debug_logs)
+        {
+            std::cout << "[OCL C++ Interface] OpenCL buffer of size " << size << " created successfully in the " << device_type_str << "." << std::endl;
         }
 
         return buffer;
@@ -251,8 +249,8 @@ cl::Buffer OCLInterface::createBuffer(size_t size, cl_mem_flags flags, void *hos
         std::string error_msg;
 
         // Retrieve device memory info for better error messages
-        cl_ulong global_mem = this->selected_device.getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>();   // Total global memory size
-        cl_ulong max_alloc = this->selected_device.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE>(); // Max allocation size allowed
+        cl_ulong global_mem = device.getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>();   // Total global memory size
+        cl_ulong max_alloc = device.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE>(); // Max allocation size allowed
 
         // Converting sizes to MB for easier readability
         cl_ulong global_mem_mb = global_mem / (1024 * 1024);
@@ -262,11 +260,11 @@ cl::Buffer OCLInterface::createBuffer(size_t size, cl_mem_flags flags, void *hos
         switch (error_code)
         {
         case CL_MEM_OBJECT_ALLOCATION_FAILURE:
-            std::cerr << "[OCL C++ Interface] Error: GPU out of memory for buffer allocation of size " << size << "." << std::endl;
+            std::cerr << "[OCL C++ Interface] Error: " << device_type_str << " out of memory for buffer allocation of size " << size << "." << std::endl;
             std::cerr << "> Device Global Memory Size: " << global_mem_mb << " MB" << std::endl;
             std::cerr << "> Requested Buffer Size: " << buff_size_mb << " MB" << std::endl;
 
-            error_msg = "GPU out of memory";
+            error_msg = device_type_str + " out of memory for buffer allocation";
             break;
 
         case CL_INVALID_BUFFER_SIZE:
@@ -296,11 +294,18 @@ cl::Buffer OCLInterface::createBuffer(size_t size, cl_mem_flags flags, void *hos
     }
 }
 
-void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_range, const cl::NDRange &local_range)
+void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_range, const cl::NDRange &local_range, OCLInterface::DeviceType device_type)
 {
+    cl::CommandQueue &command_queue = (device_type == DeviceType::GPU) ? this->gpu_command_queue : this->cpu_command_queue;
+
     try
     {
-        this->command_queue.enqueueNDRangeKernel(kernel, cl::NullRange, global_range, local_range);
+        sighandler_t old_sigchld_handler = signal(SIGCHLD, SIG_DFL);
+
+        command_queue.enqueueNDRangeKernel(kernel, cl::NullRange, global_range, local_range);
+        command_queue.finish(); // Wait for the kernel execution to complete before proceeding
+
+        signal(SIGCHLD, old_sigchld_handler);
     }
     catch (const cl::Error &err)
     {
@@ -316,22 +321,26 @@ void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_r
     }
 }
 
-void OCLInterface::readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, size_t offset) const
+void OCLInterface::readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, DeviceType device_type, size_t offset) const
 {
-    this->command_queue.enqueueReadBuffer(buffer, CL_TRUE, offset, size, host_ptr);
+    const cl::CommandQueue &command_queue = (device_type == DeviceType::GPU) ? this->gpu_command_queue : this->cpu_command_queue;
+    command_queue.enqueueReadBuffer(buffer, CL_TRUE, offset, size, host_ptr);
 }
 
-void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset) const
+void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, DeviceType device_type, size_t offset) const
 {
+    const cl::CommandQueue &command_queue = (device_type == DeviceType::GPU) ? this->gpu_command_queue : this->cpu_command_queue;
+
     // This function could be non-blocking in the future...
-    this->command_queue.enqueueWriteBuffer(buffer, CL_TRUE, offset, size, host_ptr);
+    command_queue.enqueueWriteBuffer(buffer, CL_TRUE, offset, size, host_ptr);
 }
 
-void *OCLInterface::mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_flags flags, size_t size, size_t offset) const
+void *OCLInterface::mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_flags flags, size_t size, DeviceType device_type, size_t offset) const
 {
     cl_int err;
+    const cl::CommandQueue &command_queue = (device_type == DeviceType::GPU) ? this->gpu_command_queue : this->cpu_command_queue;
 
-    void *mapped_ptr = this->command_queue.enqueueMapBuffer(buffer, CL_TRUE, flags, offset, size, nullptr, nullptr, &err);
+    void *mapped_ptr = command_queue.enqueueMapBuffer(buffer, CL_TRUE, flags, offset, size, nullptr, nullptr, &err);
 
     if (err != CL_SUCCESS)
     {
@@ -342,12 +351,14 @@ void *OCLInterface::mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_fl
     return mapped_ptr;
 }
 
-void OCLInterface::unMapHostPtr(const cl::Buffer &buffer, void *host_ptr) const
+void OCLInterface::unMapHostPtr(const cl::Buffer &buffer, void *host_ptr, DeviceType device_type) const
 {
-    this->command_queue.enqueueUnmapMemObject(buffer, host_ptr);
+    const cl::CommandQueue &command_queue = (device_type == DeviceType::GPU) ? this->gpu_command_queue : this->cpu_command_queue;
+
+    command_queue.enqueueUnmapMemObject(buffer, host_ptr);
 }
 
 void OCLInterface::synchronize() const
 {
-    this->command_queue.finish(); // Wait for all commands up to this point to complete in the command queue
+    this->gpu_command_queue.finish(); // Wait for all commands up to this point to complete in the command queue
 }

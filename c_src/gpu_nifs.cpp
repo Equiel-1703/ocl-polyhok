@@ -55,18 +55,16 @@ void init_ocl(ErlNifEnv *env)
 
   try
   {
-    // Selecting default platform
-    open_cl->selectDefaultPlatform();
+    // This will scan the available platforms and devices and select the first GPU and CPU it finds.
+    // If it doesn't find a CPU and GPU, it will throw an exception and print an error message in cerr.
+    open_cl->selectPlatformsAndDevices();
 
-    // Selecting default GPU device (i.e. the first available of its type)
-    open_cl->selectDefaultDevice(CL_DEVICE_TYPE_GPU);
-
-    // Check for extension support
+    // Check for double data type support in GPU and int64 atomics support (required for compare and swap (CAS) operations)
     std::vector<std::string> desired_extensions = {"cl_khr_fp64", "cl_khr_int64_base_atomics"};
-    std::vector<std::pair<std::string, bool>> extensions_support = open_cl->checkDeviceExtensions(desired_extensions);
+    std::vector<std::pair<std::string, bool>> extensions_supported = open_cl->checkDeviceExtensions(desired_extensions, OCLInterface::DeviceType::GPU);
 
     // Update global flags for extension support
-    for (const auto &ext : extensions_support)
+    for (const auto &ext : extensions_supported)
     {
       if (ext.first == "cl_khr_fp64")
       {
@@ -78,15 +76,15 @@ void init_ocl(ErlNifEnv *env)
       }
     }
 
-    // If both extensions are supported, then this device can handle the double type
+    // If both extensions are supported, then the selected GPU can handle the double type
     if (fp64_supported && int64_base_atomics_supported)
     {
       // Define flag for double support in OpenCL build options
-      open_cl->setBuildOptions("-D DOUBLE_SUPPORTED=1");
+      open_cl->setBuildOptions("-D DOUBLE_SUPPORTED=1", OCLInterface::DeviceType::GPU);
     }
 
-    // Add ignore warnings build option
-    open_cl->setBuildOptions(open_cl->getBuildOptions() + " -w");
+    // Add ignore warnings build option (regardless of double support) in the GPU
+    open_cl->setBuildOptions(open_cl->getBuildOptions() + " -w", OCLInterface::DeviceType::GPU);
   }
   catch (const std::exception &e)
   {
@@ -130,6 +128,27 @@ static void unload(ErlNifEnv * /* env */, void * /* priv_data */)
   }
 }
 
+// This function is used to retrieve the OpenCL device type (GPU or CPU) from the given Erlang term (an Elixir atom)
+// and convert it to the corresponding OCLInterface::DeviceType enum value.
+// If the atom is not a valid device type, it throws an exception.
+// Since this is used frequently in the NIFs, I defined it as an inline function for better performance.
+inline OCLInterface::DeviceType get_device_type(ERL_NIF_TERM e_device_type, ErlNifEnv *env)
+{
+  if (enif_is_identical(e_device_type, enif_make_atom(env, "gpu")))
+  {
+    return OCLInterface::DeviceType::GPU;
+  }
+  else if (enif_is_identical(e_device_type, enif_make_atom(env, "cpu")))
+  {
+    return OCLInterface::DeviceType::CPU;
+  }
+  else
+  {
+    std::cerr << "[ERROR] Invalid device type. Expected 'gpu' or 'cpu'." << std::endl;
+    throw std::invalid_argument("Invalid device type");
+  }
+}
+
 // This function compiles the given kernel code and launches it with the specified blocks and threads.
 static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -166,9 +185,13 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
   cl::Program program;
   cl::Kernel kernel;
 
+  // Getting device type (GPU or CPU). It is the last argument.
+  ERL_NIF_TERM e_device_type = argv[7];
+  OCLInterface::DeviceType device_type = get_device_type(e_device_type, env);
+
   try
   {
-    program = open_cl->createProgram(code);
+    program = open_cl->createProgram(code, device_type);
     kernel = open_cl->createKernel(program, kernel_name.c_str());
   }
   catch (const std::exception &e)
@@ -344,7 +367,7 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
   // Now we can execute the kernel
   try
   {
-    open_cl->executeKernel(kernel, global_range, local_range);
+    open_cl->executeKernel(kernel, global_range, local_range, device_type);
 
     if (debug_logs)
     {
@@ -359,28 +382,25 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
   return enif_make_int(env, 0);
 }
 
-// This function retrieves the OpenCL array from the device (GPU) and returns it to the host as an Erlang term.
-static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
+// This function retrieves the OpenCL array from the device (GPU/CPU) and returns it to the host as an Erlang term.
+static ERL_NIF_TERM get_device_array_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
 {
-  int nrow, ncol;
-  size_t data_size;
-  char type_name[1024];
-
   cl::Buffer *device_array = nullptr;
-  
+
   // Get the Buffer resource to copy data from
   if (!enif_get_resource(env, argv[0], ARRAY_TYPE, (void **)&device_array))
   {
     return enif_make_badarg(env);
   }
 
-  // Get number of rows
+  // Get number of rows and columns
+  int nrow, ncol;
+
   if (!enif_get_int(env, argv[1], &nrow))
   {
     return enif_make_badarg(env);
   }
 
-  // Get number of columns
   if (!enif_get_int(env, argv[2], &ncol))
   {
     return enif_make_badarg(env);
@@ -389,6 +409,8 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   // Get type name
   ERL_NIF_TERM e_type_name = argv[3];
   unsigned int size_type_name;
+  char type_name[1024];
+
   if (!enif_get_list_length(env, e_type_name, &size_type_name))
   {
     return enif_make_badarg(env);
@@ -397,6 +419,8 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   enif_get_string(env, e_type_name, type_name, size_type_name + 1, ERL_NIF_LATIN1);
 
   // Calculating the size of the result
+  size_t data_size;
+
   if (strcmp(type_name, "float") == 0)
   {
     data_size = sizeof(float) * nrow * ncol;
@@ -412,10 +436,14 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   else // Unknown type
   {
     char message[200];
-    strcpy(message, "[ERROR] (get_gpu_array_nif) copying data from device to host: unknown type ");
+    strcpy(message, "[ERROR] (get_device_array_nif) copying data from device to host: unknown type ");
     strcat(message, type_name);
     return enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
   }
+
+  // Get device type (GPU or CPU)
+  ERL_NIF_TERM e_device_type = argv[4];
+  OCLInterface::DeviceType device_type = get_device_type(e_device_type, env);
 
   // Allocate memory in the host to store the result
   // According to Erlang's docs, for LARGE binaries, it is better to use enif_alloc_binary.
@@ -424,7 +452,7 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   if (!enif_alloc_binary(data_size, &host_bin))
   {
     char message[200];
-    strcpy(message, "[ERROR] (get_gpu_array_nif) failed to allocate binary of size ");
+    strcpy(message, "[ERROR] (get_device_array_nif) failed to allocate binary of size ");
     strcat(message, std::to_string(data_size).c_str());
     return enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
   }
@@ -435,7 +463,7 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   // Copying data from device to host
   try
   {
-    open_cl->readBuffer(*device_array, result_data_pointer, data_size);
+    open_cl->readBuffer(*device_array, result_data_pointer, data_size, device_type);
 
     if (debug_logs)
     {
@@ -444,7 +472,7 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   }
   catch (const std::exception &e)
   {
-    std::cerr << "[ERROR] (get_gpu_array_nif) copying data from device to host: " << e.what() << std::endl;
+    std::cerr << "[ERROR] (get_device_array_nif) copying data from device to host: " << e.what() << std::endl;
     return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
   }
 
@@ -455,25 +483,24 @@ static ERL_NIF_TERM get_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
 
 // This function creates a new GPU array with the specified number of rows, columns, and type.
 // It allocates memory on the GPU and copies data to it from the host array provided.
-static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM new_array_from_nx_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
 {
-  int nrow, ncol;
-  size_t data_size;
+  // Get the host array binary
   ErlNifBinary host_array_el;
 
-  // Get the host array binary
   if (!enif_inspect_binary(env, argv[0], &host_array_el))
   {
     return enif_make_badarg(env);
   }
 
-  // Get number of rows
+  // Get number of rows and columns
+  int nrow, ncol;
+
   if (!enif_get_int(env, argv[1], &nrow))
   {
     return enif_make_badarg(env);
   }
 
-  // Get number of columns
   if (!enif_get_int(env, argv[2], &ncol))
   {
     return enif_make_badarg(env);
@@ -490,7 +517,9 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int /* argc */, cons
   char type_name[1024];
   enif_get_string(env, e_type_name, type_name, size_type_name + 1, ERL_NIF_LATIN1);
 
-  // Calculates the size of the data to be copied to the GPU
+  // Calculates the size of the data to be copied to the GPU/CPU
+  size_t data_size;
+
   if (strcmp(type_name, "float") == 0)
   {
     data_size = sizeof(float) * ncol * nrow;
@@ -506,32 +535,36 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int /* argc */, cons
   else // Unknown type
   {
     char message[200];
-    strcpy(message, "[ERROR] (create_gpu_array_nx_nif): unknown type ");
+    strcpy(message, "[ERROR] (new_array_from_nx_nif): unknown type ");
     strcat(message, type_name);
     return enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
   }
 
+  // Get device type (GPU or CPU)
+  ERL_NIF_TERM e_device_type = argv[4];
+  OCLInterface::DeviceType device_type = get_device_type(e_device_type, env);
+
   try
   {
-    // Allocate an empty buffer on the GPU for the array
-    cl::Buffer dev_array = open_cl->createBuffer(data_size, CL_MEM_READ_WRITE);
+    // Allocate an empty buffer on the device for the array
+    cl::Buffer dev_array = open_cl->createBuffer(data_size, CL_MEM_READ_WRITE, device_type);
     // Copy data from host to device (H2D copy)
-    open_cl->writeBuffer(dev_array, (void *)host_array_el.data, data_size);
+    open_cl->writeBuffer(dev_array, (void *)host_array_el.data, data_size, device_type);
 
     // Allocate an Erlang resource to hold the C++ buffer object
-    cl::Buffer *gpu_res = (cl::Buffer *)enif_alloc_resource(ARRAY_TYPE, sizeof(cl::Buffer));
+    cl::Buffer *device_res = (cl::Buffer *)enif_alloc_resource(ARRAY_TYPE, sizeof(cl::Buffer));
 
     // Using placement new to construct the cl::Buffer in the resource's memory
-    new (gpu_res) cl::Buffer(dev_array);
+    new (device_res) cl::Buffer(dev_array);
 
-    ERL_NIF_TERM return_term = enif_make_resource(env, gpu_res);
+    ERL_NIF_TERM return_term = enif_make_resource(env, device_res);
 
     // Release the C++ handle to the resource, letting the BEAM manage its lifetime
-    enif_release_resource(gpu_res);
+    enif_release_resource(device_res);
 
     if (debug_logs)
     {
-      std::cout << "[C++ GPU NIF] New GPU array created with " << nrow << " rows, " << ncol << " columns, and type " << type_name << std::endl;
+      std::cout << "[C++ GPU NIF] New device array created with " << nrow << " rows, " << ncol << " columns, and type " << type_name << std::endl;
       std::cout << "[C++ GPU NIF] Data copied from host to device successfully." << std::endl;
     }
 
@@ -543,19 +576,17 @@ static ERL_NIF_TERM create_gpu_array_nx_nif(ErlNifEnv *env, int /* argc */, cons
   }
 }
 
-// Creates a new empty GPU array with the specified number of rows, columns, and type
-static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
+// Creates a new empty GPU/CPU array with the specified number of rows, columns, and type
+static ERL_NIF_TERM new_empy_array_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
 {
+  // Get number of rows and columns
   int nrow, ncol;
-  size_t data_size;
 
-  // Get number of rows
   if (!enif_get_int(env, argv[0], &nrow))
   {
     return enif_make_badarg(env);
   }
 
-  // Get number of columns
   if (!enif_get_int(env, argv[1], &ncol))
   {
     return enif_make_badarg(env);
@@ -577,6 +608,8 @@ static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   enif_get_string(env, e_type_name, type_name, size_type_name + 1, ERL_NIF_LATIN1);
 
   // From here on, we will use the type name to determine the data size and allocate memory accordingly
+  size_t data_size;
+
   if (strcmp(type_name, "float") == 0)
   {
     data_size = sizeof(float) * nrow * ncol;
@@ -592,30 +625,34 @@ static ERL_NIF_TERM new_gpu_array_nif(ErlNifEnv *env, int /* argc */, const ERL_
   else // Unknown type
   {
     char message[200];
-    strcpy(message, "[ERROR] new_gpu_array_nif: unknown type: ");
+    strcpy(message, "[ERROR] new_empy_array_nif: unknown type: ");
     strcat(message, type_name);
     return enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
   }
 
+  // Get device type (GPU or CPU)
+  ERL_NIF_TERM e_device_type = argv[3];
+  OCLInterface::DeviceType device_type = get_device_type(e_device_type, env);
+
   try
   {
-    // Allocate memory on the GPU
-    cl::Buffer dev_array = open_cl->createBuffer(data_size, CL_MEM_READ_WRITE);
+    // Allocate memory on the GPU/CPU
+    cl::Buffer dev_array = open_cl->createBuffer(data_size, CL_MEM_READ_WRITE, device_type);
 
     // Allocate an Erlang resource to hold the C++ buffer object
-    cl::Buffer *gpu_res = (cl::Buffer *)enif_alloc_resource(ARRAY_TYPE, sizeof(cl::Buffer));
+    cl::Buffer *device_res = (cl::Buffer *)enif_alloc_resource(ARRAY_TYPE, sizeof(cl::Buffer));
 
     // Using placement new to construct the cl::Buffer in the resource's memory
-    new (gpu_res) cl::Buffer(dev_array);
+    new (device_res) cl::Buffer(dev_array);
 
-    ERL_NIF_TERM return_term = enif_make_resource(env, gpu_res);
+    ERL_NIF_TERM return_term = enif_make_resource(env, device_res);
 
     // Release the C++ handle to the resource, letting the BEAM manage its lifetime
-    enif_release_resource(gpu_res);
+    enif_release_resource(device_res);
 
     if (debug_logs)
     {
-      std::cout << "[C++ GPU NIF] New GPU array created with " << nrow << " rows, " << ncol << " columns, and type " << type_name << std::endl;
+      std::cout << "[C++ GPU NIF] New device array created with " << nrow << " rows, " << ncol << " columns, and type " << type_name << std::endl;
     }
 
     return return_term;
@@ -662,7 +699,7 @@ static ERL_NIF_TERM set_debug_logs_nif(ErlNifEnv *env, int argc, const ERL_NIF_T
   return enif_make_int(env, 0);
 }
 
-// This function checks if the current device supports double precision floating points
+// This function checks if the current GPU supports double precision floating points
 // and int64 base atomics extensions for CAS
 static ERL_NIF_TERM double_supported_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM /* argv */[])
 {
@@ -678,9 +715,9 @@ static ERL_NIF_TERM double_supported_nif(ErlNifEnv *env, int /* argc */, const E
 
 static ErlNifFunc nif_funcs[] = {
     {.name = "jit_compile_and_launch_nif", .arity = 8, .fptr = jit_compile_and_launch_nif, .flags = 0},
-    {.name = "new_gpu_array_nif", .arity = 3, .fptr = new_gpu_array_nif, .flags = 0},
-    {.name = "get_gpu_array_nif", .arity = 4, .fptr = get_gpu_array_nif, .flags = 0},
-    {.name = "create_gpu_array_nx_nif", .arity = 4, .fptr = create_gpu_array_nx_nif, .flags = 0},
+    {.name = "new_empy_array_nif", .arity = 4, .fptr = new_empy_array_nif, .flags = 0},
+    {.name = "get_device_array_nif", .arity = 5, .fptr = get_device_array_nif, .flags = 0},
+    {.name = "new_array_from_nx_nif", .arity = 5, .fptr = new_array_from_nx_nif, .flags = 0},
     {.name = "synchronize_nif", .arity = 0, .fptr = synchronize_nif, .flags = 0},
     {.name = "set_debug_logs_nif", .arity = 1, .fptr = set_debug_logs_nif, .flags = 0},
     {.name = "double_supported_nif", .arity = 0, .fptr = double_supported_nif, .flags = 0}};

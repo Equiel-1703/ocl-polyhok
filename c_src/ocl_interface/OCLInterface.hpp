@@ -19,22 +19,14 @@
 class OCLInterface
 {
 private:
-    cl::Platform selected_platform;
-    cl::Device selected_device;
-    cl::Context context;
-
-    cl::CommandQueue command_queue;
-
-    /**
-     * @brief Creates the OpenCL context for the selected_device.
-     */
-    void createContext();
-    /**
-     * @brief Creates the OpenCL command queue for the selected_device and context.
-     */
-    void createCommandQueue();
+    cl::Platform gpu_platform, cpu_platform;
+    cl::Device gpu, cpu;
+    cl::Context gpu_context, cpu_context;
+    cl::CommandQueue gpu_command_queue, cpu_command_queue;
 
     /**
+     * @deprecated This function is deprecated and is not recommended for use. I left it here just in case, but it may be removed in future versions.
+     * 
      * @brief Reads the kernel code from a file.
      * 
      * @param file_name The name of the file containing the kernel code.
@@ -43,15 +35,26 @@ private:
     std::string getKernelCode(const char *file_name);
 
     /**
-     * @brief OpenCL program build options.
+     * @brief OpenCL program build options for the GPU.
      */
-    std::string build_options;
+    std::string build_options_gpu;
+    /**
+    * @brief OpenCL program build options for the CPU.
+    */
+    std::string build_options_cpu;
+
     /**
      * @brief Debug logs flag.
      */
     bool debug_logs;
 
 public:
+    enum class DeviceType
+    {
+        CPU,
+        GPU
+    };
+
     /**
      * @brief Default constructor for OCLInterface.
      *
@@ -84,81 +87,55 @@ public:
     void setDebugLogs(bool enable);
 
     /**
-     * @brief Returns a vector of available OpenCL platforms on the system.
-     * 
-     * @return A vector containing the available OpenCL platforms.
+     * @brief Selects a CPU and GPU device from the available OpenCL platforms. When selected, initializes the corresponding OpenCL contexts and command queues for both devices. 
+     * If something goes wrong during platform/device selection, a detailed error message is printed to stderr and a runtime_error exception is thrown.
      */
-    std::vector<cl::Platform> getAvailablePlatforms();
-    /**
-     * @brief Selects the given OpenCL platform as the active platform.
-     * 
-     * @param p The OpenCL platform to select.
-     */
-    void selectPlatform(cl::Platform p);
-    /**
-     * @brief Selects the first available OpenCL platform as the active platform.
-     */
-    void selectDefaultPlatform();
-
-    /**
-     * @brief Returns a vector of available OpenCL devices of the specified type on the selected platform.
-     * If no device type is specified, all device types are considered. If no platform is selected, an exception is thrown.
-     * 
-     * @param device_type The type of OpenCL devices to query (default is CL_DEVICE_TYPE_ALL).
-     * @return A vector containing the available OpenCL devices of the specified type.
-     */
-    std::vector<cl::Device> getAvailableDevices(cl_device_type device_type = CL_DEVICE_TYPE_ALL);
-    /**
-     * @brief Selects the given OpenCL device as the active device.
-     * 
-     * @param d The OpenCL device to select.
-     */
-    void selectDevice(cl::Device d);
-    /**
-     * @brief Selects the first available OpenCL device of the specified type as the active device.
-     * If no device type is specified, all device types are considered.
-     * 
-     * @param device_type The type of OpenCL device to select (default is CL_DEVICE_TYPE_ALL).
-     */
-    void selectDefaultDevice(cl_device_type device_type = CL_DEVICE_TYPE_ALL);
+    void selectPlatformsAndDevices();
 
     /**
      * @brief Checks if the selected device supports the specified OpenCL extensions.
      * 
      * @param extensions A vector of strings containing extension names to check for support. Example: {"cl_khr_fp64"}
+     * @param device_type The type of device for which to check the extensions (CPU or GPU).
      * @return A vector of pairs, where each pair contains the extension name and a boolean indicating support (true if  
      * the extension is supported, false otherwise).
      */
-    std::vector<std::pair<std::string, bool>> checkDeviceExtensions(std::vector<std::string> &extensions);
+    std::vector<std::pair<std::string, bool>> checkDeviceExtensions(std::vector<std::string> &extensions, DeviceType device_type);
     /**
      * @brief Sets the OpenCL program build options.
      * 
      * @param options A string containing the build options. Example: "-D MY_DEFINE=1 -cl-fast-relaxed-math"
+     * @param device_type The type of device for which to set the build options (CPU or GPU).
      */
-    void setBuildOptions(const std::string &options);
+    void setBuildOptions(const std::string &options, DeviceType device_type);
     
     /**
      * @brief Creates and builds an OpenCL program from the given program code string. The build options are used during the build process.
      * If something goes wrong during the build, a detailed error message is printed to stderr and a runtime_error exception is thrown.
      * 
      * @param program_code A string containing the OpenCL program source code.
+     * @param device_type The type of device where the program will be executed (CPU or GPU).
      * @return The created OpenCL program.
      */
-    cl::Program createProgram(std::string &program_code);
+    cl::Program createProgram(std::string &program_code, DeviceType device_type);
     /**
      * @brief Creates an OpenCL program from the given program code C-string. Same behavior as createProgram(std::string &).
      * 
      * @param program_code A C-string containing the OpenCL program source code.
+     * @param device_type The type of device where the program will be executed (CPU or GPU).
      * @return The created OpenCL program.
      */
-    cl::Program createProgram(const char *program_code);
+    cl::Program createProgram(const char *program_code, DeviceType device_type);
     /**
+     * @deprecated This function is deprecated and is not recommended for use. I left it here just in case, but it may be removed in future versions.
+     * 
      * @brief Creates an OpenCL program by reading the kernel code from the specified file. Same behavior as createProgram(std::string &).
      * 
      * @param file_name The name of the file containing the OpenCL kernel code.
+     * @param device_type The type of device where the program will be executed (CPU or GPU).
      * @return The created OpenCL program.
      */
-    cl::Program createProgramFromFile(const char *file_name);
+    cl::Program createProgramFromFile(const char *file_name, DeviceType device_type);
     
     /**
      * @brief Creates an OpenCL kernel from the given program and kernel name.
@@ -168,16 +145,6 @@ public:
      * @return The created OpenCL kernel.
      */
     cl::Kernel createKernel(const cl::Program &program, const char *kernel_name);
-    /**
-     * @brief Creates an OpenCL buffer with the specified size and memory flags. If somehing goes wrong during buffer creation, a
-     * detailed error message is printed to stderr and a runtime_error exception is thrown.
-     * 
-     * @param size The size of the buffer to create in bytes.
-     * @param flags The memory flags for the buffer (e.g., CL_MEM_READ_WRITE).
-     * @param host_ptr Optional pointer to host memory to initialize the buffer with (default is nullptr).
-     * @return The created OpenCL buffer.
-     */
-    cl::Buffer createBuffer(size_t size, cl_mem_flags flags, void *host_ptr = nullptr);
 
     /**
      * @brief Executes the given OpenCL kernel with the specified global and local work sizes. This call is non-blocking.
@@ -185,9 +152,22 @@ public:
      * @param kernel The OpenCL kernel to execute.
      * @param global_range The global work size as cl::NDRange.
      * @param local_range The local work size as cl::NDRange.
+     * @param device_type The type of device where the kernel will be executed (CPU or GPU).
      */
-    void executeKernel(cl::Kernel &kernel, const cl::NDRange &global_range, const cl::NDRange &local_range);
+    void executeKernel(cl::Kernel &kernel, const cl::NDRange &global_range, const cl::NDRange &local_range, DeviceType device_type);
 
+    /**
+     * @brief Creates an OpenCL buffer with the specified size and memory flags. If somehing goes wrong during buffer creation, a
+     * detailed error message is printed to stderr and a runtime_error exception is thrown.
+     * 
+     * @param size The size of the buffer to create in bytes.
+     * @param flags The memory flags for the buffer (e.g., CL_MEM_READ_WRITE).
+     * @param device_type The type of device where the buffer will be allocated (CPU or GPU).
+     * @param host_ptr Optional pointer to host memory to initialize the buffer with (default is nullptr).
+     * @return The created OpenCL buffer.
+     */
+    cl::Buffer createBuffer(size_t size, cl_mem_flags flags, DeviceType device_type, void *host_ptr = nullptr);
+    
     /**
      * @brief Reads data from the given OpenCL buffer into the specified host memory. This call is blocking and 
      * will wait until the read operation is complete.
@@ -197,7 +177,7 @@ public:
      * @param size The size of data to read in bytes.
      * @param offset The offset in the buffer from where to start reading (default is 0).
      */
-    void readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, size_t offset = 0) const;
+    void readBuffer(const cl::Buffer &buffer, void *host_ptr, size_t size, DeviceType device_type, size_t offset = 0) const;
     /**
      * @brief Writes data from the specified host memory into the given OpenCL buffer. This call is blocking and
      * will wait until the write operation is complete.
@@ -207,7 +187,7 @@ public:
      * @param size The size of data to write in bytes.
      * @param offset The offset in the buffer from where to start writing (default is 0).
      */
-    void writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, size_t offset = 0) const;
+    void writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, DeviceType device_type, size_t offset = 0) const;
     /**
      * @brief Maps the given OpenCL buffer to pinned host memory, allowing for efficient data transfer between the host and device.
      * This call is blocking and will wait until the mapping operation is complete.
@@ -218,26 +198,17 @@ public:
      * @param offset The offset in the buffer from where to start mapping (default is 0).
      * @return A pointer to the mapped host memory.
      */
-    void *mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_flags flags, size_t size, size_t offset = 0) const;
+    void *mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_flags flags, size_t size, DeviceType device_type, size_t offset = 0) const;
     /**
      * @brief Unmaps the previously mapped OpenCL buffer from pinned host memory.
      * 
      * @param buffer The OpenCL buffer to unmap.
      * @param host_ptr Pointer to the mapped host memory to unmap.
      */
-    void unMapHostPtr(const cl::Buffer &buffer, void *host_ptr) const;
+    void unMapHostPtr(const cl::Buffer &buffer, void *host_ptr, DeviceType device_type) const;
 
     /**
      * @brief Synchronizes the OpenCL command queue, ensuring that all previously enqueued commands have completed.
      */
     void synchronize() const;
-
-    // -- Getters --
-    // I refuse to document these, they are self-explanatory and I'm lazy.
-
-    std::string getBuildOptions() const { return build_options; }
-    cl::Context getContext() const { return context; }
-    cl::Device getSelectedDevice() const { return selected_device; }
-    cl::Platform getSelectedPlatform() const { return selected_platform; }
-    cl::CommandQueue getCommandQueue() const { return command_queue; }
 };
