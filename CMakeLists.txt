@@ -5,6 +5,18 @@ project(OCL_PolyHok_Runtime VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# ---- Enable Compiler Warnings ----
+
+# CMake automatically sets the MSVC variable to true if we are compiling on Windows using the Visual Studio compiler.
+if(MSVC)
+    # MSVC's /Wall is too noisy. /W4 is the recommended equivalent to -Wall -Wextra.
+    add_compile_options(/W4)
+# Checks if we are using GCC or Clang (which covers Linux, macOS, and MinGW on Windows)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    # GCC and Clang standard warning flags
+    add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
 # ---- Find Erlang development libraries - it is REQUIRED, we can't proceed without this!! ---- 
 
 # Get erlang executable
