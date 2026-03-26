@@ -713,13 +713,17 @@ static ERL_NIF_TERM double_supported_nif(ErlNifEnv *env, int /* argc */, const E
   }
 }
 
+// The ErlNifFunc struct in the Erlang headers expects the arguments in this exact order: name, arity, fptr, flags.
+// I'm using this syntax because the designated initializer syntax was not adopted in C++ until C++20, and this project
+// uses C++17. Therefore, I'm using the traditional aggregate initialization syntax, which requires the fields to be in
+// the order they are declared in the struct.
 static ErlNifFunc nif_funcs[] = {
-    {.name = "jit_compile_and_launch_nif", .arity = 8, .fptr = jit_compile_and_launch_nif, .flags = 0},
-    {.name = "new_empy_array_nif", .arity = 4, .fptr = new_empy_array_nif, .flags = 0},
-    {.name = "get_device_array_nif", .arity = 5, .fptr = get_device_array_nif, .flags = 0},
-    {.name = "new_array_from_nx_nif", .arity = 5, .fptr = new_array_from_nx_nif, .flags = 0},
-    {.name = "synchronize_nif", .arity = 0, .fptr = synchronize_nif, .flags = 0},
-    {.name = "set_debug_logs_nif", .arity = 1, .fptr = set_debug_logs_nif, .flags = 0},
-    {.name = "double_supported_nif", .arity = 0, .fptr = double_supported_nif, .flags = 0}};
+    {"jit_compile_and_launch_nif", 8, jit_compile_and_launch_nif, 0},
+    {"new_empy_array_nif", 4, new_empy_array_nif, 0},
+    {"get_device_array_nif", 5, get_device_array_nif, 0},
+    {"new_array_from_nx_nif", 5, new_array_from_nx_nif, 0},
+    {"synchronize_nif", 0, synchronize_nif, 0},
+    {"set_debug_logs_nif", 1, set_debug_logs_nif, 0},
+    {"double_supported_nif", 0, double_supported_nif, 0}};
 
 ERL_NIF_INIT(Elixir.OCLPolyHok, nif_funcs, &load, NULL, NULL, &unload)
