@@ -102,8 +102,11 @@ static ERL_NIF_TERM gen_bmp_float_nif(ErlNifEnv *env, int /* argc */, const ERL_
   return enif_make_int(env, 0);
 }
 
+// The ErlNifFunc struct in the Erlang headers expects the arguments in this exact order: name, arity, fptr, flags.
+// I'm using this syntax because the designated initializer syntax was not adopted in C++ until C++20, and this project
+// uses C++17. Therefore, I'm sticking strictly to the supported aggregate initialization syntax of this standard.
 static ErlNifFunc nif_funcs[] = {
-    {.name = "gen_bmp_int_nif", .arity = 3, .fptr = gen_bmp_int_nif, .flags = 0},
-    {.name = "gen_bmp_float_nif", .arity = 3, .fptr = gen_bmp_float_nif, .flags = 0}};
+    {"gen_bmp_int_nif", 3, gen_bmp_int_nif, 0},
+    {"gen_bmp_float_nif", 3, gen_bmp_float_nif, 0}};
 
 ERL_NIF_INIT(Elixir.BMP, nif_funcs, NULL, NULL, NULL, NULL)
