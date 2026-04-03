@@ -1,5 +1,4 @@
 #include "OCLInterface.hpp"
-#include <signal.h>
 
 OCLInterface::OCLInterface() : OCLInterface(false) {}
 
@@ -302,12 +301,7 @@ void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_r
 
     try
     {
-        sighandler_t old_sigchld_handler = signal(SIGCHLD, SIG_DFL);
-
         command_queue.enqueueNDRangeKernel(kernel, cl::NullRange, global_range, local_range);
-        command_queue.finish(); // Wait for the kernel execution to complete before proceeding
-
-        signal(SIGCHLD, old_sigchld_handler);
     }
     catch (const cl::Error &err)
     {

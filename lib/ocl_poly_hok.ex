@@ -10,6 +10,17 @@ defmodule OCLPolyHok do
 
     case ret do
       :ok ->
+        # The Erlang VM sets the SIGCHLD signal to be ignored by default to avoid zombies, but some OpenCL implementations
+        # (like PoCL) require it to be set to the default handler to work properly. So I've set it to the default handler 
+        # when the NIF library is loaded. As far as I understand, this should not cause any issues in the BEAM VM, in fact,
+        # even José Valim had a similar issue working in TensorFlow: 
+        # + SOURCE: https://erlang.org/pipermail/erlang-questions/2020-November/100109.html
+        # An Erlang developer said that the VM doesn't really care about this signal - it just ignores it. The problem 
+        # is more about zombie processes that may be created by other stuff running in the same process, a.k.a BEAM, like
+        # other NIFs or Erlang Ports. Therefore, we need to be careful.
+        # - Henrique
+        :os.set_signal(:sigchld, :default)
+
         :ok
 
       {:error, reason} ->
@@ -142,7 +153,7 @@ defmodule OCLPolyHok do
   end
 
   defp process_with_command(c, ctx) do
-    IO.inspect(c, label: "Processing command")
+    # IO.inspect(c, label: "Processing command")
 
     new_c =
       case c do
@@ -157,7 +168,7 @@ defmodule OCLPolyHok do
     new_exp =
       case exp do
         {{:., _, [{:__aliases__, _, [:OCLPolyHok]}, fun_name]}, _, args} ->
-          IO.inspect({fun_name, args}, label: "Processing function")
+          # IO.inspect({fun_name, args}, label: "Processing function")
           {{:., [], [{:__aliases__, [], [:OCLPolyHok]}, fun_name]}, [], [ctx | args]}
 
         _ ->
