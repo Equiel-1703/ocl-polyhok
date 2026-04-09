@@ -3,6 +3,8 @@
 
     Made by: Henrique Gabriel Rodrigues
     Oriented and supervised by: Prof. Dr. André Rauber Du Bois
+
+    Laboratory of Ubiquitous and Parallel Systems (LUPS) - Universidade Federal de Pelotas (UFPel)
 */
 
 #include <erl_nif.h>
