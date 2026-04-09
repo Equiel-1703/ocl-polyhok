@@ -5,6 +5,8 @@
     Ported to OpenCL/C++ by: Henrique Gabriel Rodrigues
     Oriented and supervised by: Prof. Dr. André Rauber Du Bois
     Original code by: Prof. Dr. André Rauber Du Bois
+
+    Laboratory of Ubiquitous and Parallel Systems (LUPS) - Universidade Federal de Pelotas (UFPel)
 */
 
 #include "ocl_interface/OCLInterface.hpp"
@@ -21,6 +23,13 @@
 bool debug_logs = false;
 bool fp64_supported = false;
 bool int64_base_atomics_supported = false;
+
+OCLInterface *open_cl = nullptr;
+
+// Global resource type for GPU arrays (cl::Buffer objects)
+ErlNifResourceType *ARRAY_TYPE;
+// Global resource type for aligned host memory (pinned memory for efficient transfers)
+ErlNifResourceType *CPU_SVM_TYPE;
 
 // Destructor for device array resource (cl::Buffer)
 void dev_array_destructor(ErlNifEnv * /* env */, void *res)
@@ -39,10 +48,32 @@ void dev_array_destructor(ErlNifEnv * /* env */, void *res)
   }
 }
 
-OCLInterface *open_cl = nullptr;
+// Destructor for aligned host memory resource
+void cpu_svm_destructor(ErlNifEnv * /* env */, void *res)
+{
+  void *svm_ptr = *((void **)res);
 
-// Global resource type for GPU arrays (cl::Buffer objects)
-ErlNifResourceType *ARRAY_TYPE;
+  if (svm_ptr == nullptr)
+  {
+    std::cerr << "[C++ GPU NIF] Warning: Attempted to destroy a null SVM pointer. Something went very wrong..." << std::endl;
+    return;
+  }
+
+  try
+  {
+
+    open_cl->destroySVM(svm_ptr, OCLInterface::DeviceType::CPU);
+
+    if (debug_logs)
+    {
+      std::cout << "[C++ GPU NIF] CPU SVM resource destroyed." << std::endl;
+    }
+  }
+  catch (const std::exception &e)
+  {
+    std::cerr << e.what() << '\n';
+  }
+}
 
 // This function initializes the OpenCL interface, selects the default platform, GPU device,
 // and checks for required extension support.
@@ -104,6 +135,15 @@ static int load(ErlNifEnv *env, void ** /* priv_data */, ERL_NIF_TERM /* load_in
       NULL,
       "gpu_ref",
       dev_array_destructor,
+      ERL_NIF_RT_CREATE,
+      NULL);
+
+  // Defines the resource type for Shared Virtual Memory (SVM) pointers (aligned host memory).
+  CPU_SVM_TYPE = enif_open_resource_type(
+      env,
+      NULL,
+      "cpu_svm_ref",
+      cpu_svm_destructor,
       ERL_NIF_RT_CREATE,
       NULL);
 
@@ -713,6 +753,89 @@ static ERL_NIF_TERM double_supported_nif(ErlNifEnv *env, int /* argc */, const E
   }
 }
 
+// This function creates a new empty Nx tensor in the CPU memory with the appropriate alignment constraints
+// required by the CPU hardware.
+static ERL_NIF_TERM new_empty_aligned_nx_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+  if (argc != 2)
+  {
+    return enif_make_badarg(env);
+  }
+
+  // Get the length of the array to be created
+  uint32_t len;
+  if (!enif_get_uint(env, argv[0], &len))
+  {
+    return enif_make_badarg(env);
+  }
+
+  // Get the type of the array to be created (e.g., "float", "int", "double")
+  ERL_NIF_TERM e_type_name = argv[1];
+  uint32_t size_type_name;
+
+  if (!enif_get_list_length(env, e_type_name, &size_type_name))
+  {
+    return enif_make_badarg(env);
+  }
+
+  std::string type_name(size_type_name, '\0');
+  if (!enif_get_string(env, e_type_name, type_name.data(), size_type_name + 1, ERL_NIF_LATIN1))
+  {
+    return enif_make_badarg(env);
+  }
+
+  // Calculate the size of the data to be allocated based on the type
+  size_t data_size;
+
+  if (type_name == "float")
+  {
+    data_size = sizeof(float) * len;
+  }
+  else if (type_name == "int")
+  {
+    data_size = sizeof(int) * len;
+  }
+  else if (type_name == "double")
+  {
+    data_size = sizeof(double) * len;
+  }
+  else // Unknown type
+  {
+    std::string message = "[ERROR] new_empty_aligned_nx_nif: unknown type: " + type_name;
+    return enif_raise_exception(env, enif_make_string(env, message.c_str(), ERL_NIF_LATIN1));
+  }
+
+  try
+  {
+    // Allocate Shared Virtual Memory (SVM) that is aligned and can be accessed by any CPU core.
+    // By default, all OCL-PolyHok's SVMs will be allocated in the CPU for CPU parallel computations.
+    // We do not intend to use SVM for GPU computations, because we are already using cl::Buffer for this.
+    void *aligned_mem = open_cl->createSVM(data_size, OCLInterface::DeviceType::CPU);
+
+    // Allocate an Erlang resource to hold the pointer to the SVM memory.
+    void **svm_res = (void **)enif_alloc_resource(CPU_SVM_TYPE, sizeof(void *));
+
+    // Store the pointer to the SVM memory in the resource
+    *svm_res = aligned_mem;
+
+    // Creating an Erlang Resource Binary to point directly to the SVM memory
+    // An Erlang Resource Binary will behave like a normal binary in the BEAM, but its data pointer will point
+    // to the aligned SVM memory OpenCL allocated for us. And when the BEAM garbage collects the Resource Binary,
+    // it will call the cpu_svm_destructor we defined, which will free the SVM memory correctly using OpenCL's API.
+    ERL_NIF_TERM resource_bin = enif_make_resource_binary(env, (void *)svm_res, aligned_mem, data_size);
+
+    // Release the resource handle, letting the BEAM manage its lifetime
+    enif_release_resource(svm_res);
+
+    // Returning our Resource Binary
+    return resource_bin;
+  }
+  catch(const std::exception& e)
+  {
+    return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
+  }
+}
+
 // The ErlNifFunc struct in the Erlang headers expects the arguments in this exact order: name, arity, fptr, flags.
 // I'm using this syntax because the designated initializer syntax was not adopted in C++ until C++20, and this project
 // uses C++17. Therefore, I'm using the traditional aggregate initialization syntax, which requires the fields to be in
@@ -724,6 +847,7 @@ static ErlNifFunc nif_funcs[] = {
     {"new_array_from_nx_nif", 5, new_array_from_nx_nif, 0},
     {"synchronize_nif", 0, synchronize_nif, 0},
     {"set_debug_logs_nif", 1, set_debug_logs_nif, 0},
-    {"double_supported_nif", 0, double_supported_nif, 0}};
+    {"double_supported_nif", 0, double_supported_nif, 0},
+    {"new_empty_aligned_nx_nif", 2, new_empty_aligned_nx_nif, 0}};
 
 ERL_NIF_INIT(Elixir.OCLPolyHok, nif_funcs, &load, NULL, NULL, &unload)

@@ -310,7 +310,24 @@ defmodule OCLPolyHok do
     %Nx.Tensor{data: %Nx.BinaryBackend{state: ref}, type: type, shape: shape, names: name}
   end
 
-  ## ----------------- Creates a new Nx tensor from a function that generates its elements -----------------
+  # ------- New NX Functions (they allocate aligned memory) -------
+
+  # == Creates a new empty Nx tensor with the specified shape and type
+    def new_nx(l, c, type) do
+      len = l * c
+
+      new_bin =
+        case type do
+          {:f, 32} -> new_empty_aligned_nx_nif(len, Kernel.to_charlist("float"))
+          {:f, 64} -> new_empty_aligned_nx_nif(len, Kernel.to_charlist("double"))
+          {:s, 32} -> new_empty_aligned_nx_nif(len, Kernel.to_charlist("int"))
+          x -> raise "new_nx: type #{inspect(x)} not suported"
+        end
+      
+      Nx.from_binary(new_bin, type) |> Nx.reshape({l, c})
+    end
+
+  # == Creates a new Nx tensor from a function that generates its elements
   def new_nx_from_function(l, c, type, fun) do
     size = l * c
 
@@ -323,6 +340,35 @@ defmodule OCLPolyHok do
 
     %Nx.Tensor{data: %Nx.BinaryBackend{state: ref}, type: type, shape: {l, c}, names: [nil, nil]}
   end
+
+  # == Creates a new Nx tensor from a list
+  # def new_nx(list, type) when is_list(list) do
+  #   {l, c} =
+  #     case TensorTools.calculate_list_dimensions(list) do
+  #       {c} ->
+  #         {1, c}
+
+  #       {l, c} ->
+  #         {l, c}
+
+  #       {l, c, d} ->
+  #         {l * c, d}
+
+  #       s ->
+  #         raise "new_nx: OCL-PolyHok only supports Nx tensors up to 3 dimensions, but the provided list has #{length(s)} dimensions"
+  #     end
+    
+  #   size = l * c
+  #   flat_list = List.flatten(list)
+
+  #   binary =
+  #     case type do
+  #       {:f, 32} -> new_matrix_from_list_f(list, size - 1, <<>>)
+  #       {:f, 64} -> new_matrix_from_list_d(list, size - 1, <<>>)
+  #       {:s, 32} -> new_matrix_from_list_i(list, size - 1, <<>>)
+  #       x -> raise "new_nx: type #{inspect(x)} not suported"
+  #     end
+  # end
 
   # ----------------- Helper functions for new_nx_from_function -----------------
   defp new_matrix_from_function_d(0, _, accumulator), do: accumulator
@@ -355,7 +401,7 @@ defmodule OCLPolyHok do
         <<accumulator::binary, function.()::float-little-32>>
       )
 
-  ## ----------------- Creates a new Nx tensor from a function that generates its elements receiving the size as argument -----------------
+  # == Creates a new Nx tensor from a function that generates its elements receiving the size as argument
   def new_nx_from_function_arg(l, c, type, fun) do
     size = l * c
 
@@ -668,6 +714,10 @@ defmodule OCLPolyHok do
 
   def new_array_from_nx_nif(_gnx, _l, _c, _type, _d) do
     raise "NIF new_array_from_nx_nif/5 not implemented"
+  end
+
+  def new_empty_aligned_nx_nif(_len, _type) do
+    raise "NIF new_empty_aligned_nx_nif/2 not implemented"
   end
 
   def synchronize_nif() do

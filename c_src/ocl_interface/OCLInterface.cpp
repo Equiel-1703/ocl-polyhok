@@ -123,6 +123,10 @@ void OCLInterface::selectPlatformsAndDevices()
 
     this->cpu_context = cl::Context(this->cpu);
     this->cpu_command_queue = cl::CommandQueue(this->cpu_context, this->cpu);
+
+    // Get CPU alignment requirements for efficient memory transfers
+    this->cpu_alignment_bytes = this->cpu.getInfo<CL_DEVICE_MEM_BASE_ADDR_ALIGN>();
+    this->cpu_alignment_bytes /= 8; // Convert from bits to bytes
 }
 
 std::vector<std::pair<std::string, bool>> OCLInterface::checkDeviceExtensions(std::vector<std::string> &extensions, OCLInterface::DeviceType device_type)
@@ -295,6 +299,77 @@ cl::Buffer OCLInterface::createBuffer(size_t size, cl_mem_flags flags, OCLInterf
     }
 }
 
+void *OCLInterface::createSVM(size_t size, OCLInterface::DeviceType device_type)
+{
+    cl::Context &context = (device_type == DeviceType::GPU) ? this->gpu_context : this->cpu_context;
+    cl::CommandQueue &command_queue = (device_type == DeviceType::GPU) ? this->gpu_command_queue : this->cpu_command_queue;
+    std::string device_type_str = (device_type == DeviceType::GPU) ? "GPU" : "CPU";
+
+    try
+    {
+        // Since we are using OpenCL 2.0, we can use Shared Virtual Memory (SVM) for efficient host-device memory sharing.
+        // This allows us to allocate memory that is directly accessible by both the host and the device via the same
+        // pointer, without needing a cl::Buffer object. This is ideal for our use case, since our goal for aligned host
+        // memory is for efficient CPU parallel execution, not the GPU.
+
+        void *svm_shared_pointer = clSVMAlloc(
+            context(), // Use the underlying cl_context from the C API
+            CL_MEM_READ_WRITE,
+            size,
+            0);
+        
+        if (svm_shared_pointer == nullptr)
+        {
+            std::cerr << "[OCL C++ Interface] Failed to allocate aligned SVM memory of size " << size << " bytes for the " << device_type_str << "." << std::endl;
+            throw std::runtime_error("Failed to allocate aligned Sjared Virtual Memory");
+        }
+
+        // We are using SVM coarse-grained sharing. This is because coarse-grained is widerly supported in essentially all OpenCL 2.0
+        // compatible devices. Unfortunately, coarse-grained SVM needs explicit synchronization.
+        // Therefore, we need to map/unmap the SVM pointer to ensure proper synchronization.
+
+        // Map the SVM pointer to ensure it's properly synchronized and can be safely accessed by the host.
+        command_queue.enqueueMapSVM(
+            svm_shared_pointer,
+            CL_TRUE,                    // Blocking call to ensure the mapping is complete before we return the pointer
+            CL_MAP_READ | CL_MAP_WRITE, // We want to read and write to this memory
+            size);                      // Size of the memory to map
+
+        if (this->debug_logs)
+        {
+            std::cout << "[OCL C++ Interface] Aligned SVM memory of size " << size << " bytes created successfully for the " << device_type_str << "." << std::endl;
+        }
+
+        return svm_shared_pointer;
+    }
+    catch (const cl::Error &e)
+    {
+        std::cerr << "[OCL C++ Interface] Failed to create aligned SVM memory. Error code: " << e.what() << std::endl;
+        throw std::runtime_error("Failed to create aligned host memory");
+    }
+}
+
+void OCLInterface::destroySVM(void *svm_ptr, DeviceType device_type)
+{
+    cl::Context &context = (device_type == DeviceType::GPU) ? this->gpu_context : this->cpu_context;
+    std::string device_type_str = (device_type == DeviceType::GPU) ? "GPU" : "CPU";
+
+    try
+    {
+        clSVMFree(context(), svm_ptr);
+
+        if (this->debug_logs)
+        {
+            std::cout << "[OCL C++ Interface] Aligned SVM memory freed successfully from the " << device_type_str << "." << std::endl;
+        }
+    }
+    catch (const cl::Error &e)
+    {
+        std::cerr << "[OCL C++ Interface] Failed to free aligned SVM memory. Error code: " << e.what() << std::endl;
+        throw std::runtime_error("Failed to free aligned host memory");
+    }
+}
+
 void OCLInterface::executeKernel(cl::Kernel &kernel, const cl::NDRange &global_range, const cl::NDRange &local_range, OCLInterface::DeviceType device_type)
 {
     cl::CommandQueue &command_queue = (device_type == DeviceType::GPU) ? this->gpu_command_queue : this->cpu_command_queue;
@@ -331,27 +406,76 @@ void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, s
     command_queue.enqueueWriteBuffer(buffer, CL_TRUE, offset, size, host_ptr);
 }
 
-void *OCLInterface::mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_flags flags, size_t size, DeviceType device_type, size_t offset) const
+void *OCLInterface::mapSVM(const cl::Buffer &buffer, size_t size, DeviceType device_type) const
 {
-    cl_int err;
     const cl::CommandQueue &command_queue = (device_type == DeviceType::GPU) ? this->gpu_command_queue : this->cpu_command_queue;
 
-    void *mapped_ptr = command_queue.enqueueMapBuffer(buffer, CL_TRUE, flags, offset, size, nullptr, nullptr, &err);
-
-    if (err != CL_SUCCESS)
+    try
     {
-        std::cerr << "[OCL C++ Interface] Failed to map OpenCL buffer to pinned memory. Error code: " << err << std::endl;
+        void *host_ptr = command_queue.enqueueMapBuffer(
+            buffer,
+            CL_TRUE,                    // Blocking call to ensure the mapping is complete before we return the pointer
+            CL_MAP_READ | CL_MAP_WRITE, // We want to read and write to this memory
+            0,                          // Offset (start of the buffer)
+            size                        // Size of the memory to map (in this case, the whole buffer)
+        );
+
+        // Check if the mapped pointer already exists in the aligned_memory_map
+        std::uintptr_t host_ptr_uint = reinterpret_cast<std::uintptr_t>(host_ptr);
+        if (this->aligned_memory_map.find(host_ptr_uint) == this->aligned_memory_map.end())
+        {
+            std::cerr << "[OCL C++ Interface] Warning: Mapped host pointer not found in aligned_memory_map. This may lead to issues when unmapping or deallocating memory." << std::endl;
+        }
+
+        return host_ptr;
+    }
+    catch (const cl::Error &e)
+    {
+        std::cerr << "[OCL C++ Interface] Failed to map OpenCL buffer to pinned memory. Error code: " << e.what() << std::endl;
         throw std::runtime_error("Failed to map OpenCL buffer to pinned memory");
     }
-
-    return mapped_ptr;
 }
 
-void OCLInterface::unMapHostPtr(const cl::Buffer &buffer, void *host_ptr, DeviceType device_type) const
+void OCLInterface::unMapSVM(void *host_ptr, DeviceType device_type) const
 {
     const cl::CommandQueue &command_queue = (device_type == DeviceType::GPU) ? this->gpu_command_queue : this->cpu_command_queue;
 
-    command_queue.enqueueUnmapMemObject(buffer, host_ptr);
+    try
+    {
+        cl::Buffer *buffer_ptr = nullptr;
+        std::uintptr_t host_ptr_uint = reinterpret_cast<std::uintptr_t>(host_ptr);
+
+        buffer_ptr = this->aligned_memory_map.at(host_ptr_uint); // This will throw an exception if the host_ptr is not found in the map
+
+        command_queue.enqueueUnmapMemObject(*buffer_ptr, host_ptr);
+        command_queue.finish(); // Ensure the unmapping is complete before we proceed
+    }
+    catch (const cl::Error &e)
+    {
+        std::cerr << "[OCL C++ Interface] Failed to unmap OpenCL buffer from pinned memory. Error code: " << e.what() << std::endl;
+        throw std::runtime_error("Failed to unmap OpenCL buffer from pinned memory");
+    }
+    catch (const std::out_of_range &e)
+    {
+        std::cerr << "[OCL C++ Interface] Error: Attempted to unmap a host pointer that was not found in the aligned_memory_map. This may indicate a logic error in memory management." << std::endl;
+        throw std::runtime_error("Host pointer not found in aligned_memory_map during unmapping");
+    }
+}
+
+cl::Buffer *OCLInterface::getMappedBufferFromHostPtr(void *host_ptr) const
+{
+    std::uintptr_t host_ptr_uint = reinterpret_cast<std::uintptr_t>(host_ptr);
+
+    auto it = this->aligned_memory_map.find(host_ptr_uint);
+    if (it != this->aligned_memory_map.end())
+    {
+        return it->second;
+    }
+    else
+    {
+        std::cerr << "[OCL C++ Interface] Warning: Host pointer not found in aligned_memory_map. This may indicate a logic error in memory management." << std::endl;
+        return nullptr;
+    }
 }
 
 void OCLInterface::synchronize() const

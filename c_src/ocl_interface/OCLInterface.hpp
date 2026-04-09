@@ -6,6 +6,7 @@
 #include <fstream>
 #include <vector>
 #include <stdexcept>
+#include <cstdint>
 
 /**
  * @class OCLInterface
@@ -18,6 +19,13 @@
  */
 class OCLInterface
 {
+public:
+    enum class DeviceType
+    {
+        CPU,
+        GPU
+    };
+
 private:
     cl::Platform gpu_platform, cpu_platform;
     cl::Device gpu, cpu;
@@ -48,13 +56,12 @@ private:
      */
     bool debug_logs;
 
-public:
-    enum class DeviceType
-    {
-        CPU,
-        GPU
-    };
+    /**
+     * @brief Alignment requirement in bytes of the CPU for efficient memory access.
+     */
+    cl_uint cpu_alignment_bytes;
 
+public:
     /**
      * @brief Default constructor for OCLInterface.
      *
@@ -167,7 +174,6 @@ public:
      * @return The created OpenCL buffer.
      */
     cl::Buffer createBuffer(size_t size, cl_mem_flags flags, DeviceType device_type, void *host_ptr = nullptr);
-
     /**
      * @brief Reads data from the given OpenCL buffer into the specified host memory. This call is blocking and
      * will wait until the read operation is complete.
@@ -188,24 +194,33 @@ public:
      * @param offset The offset in the buffer from where to start writing (default is 0).
      */
     void writeBuffer(const cl::Buffer &buffer, const void *host_ptr, size_t size, DeviceType device_type, size_t offset = 0) const;
+
     /**
-     * @brief Maps the given OpenCL buffer to pinned host memory, allowing for efficient data transfer between the host and device.
-     * This call is blocking and will wait until the mapping operation is complete.
+     * @brief Creates an aligned shared virtual memory (SVM) region that can be accessed by both the host and the device.
+     * This is used for efficient zero-copy data transfers.
      *
-     * @param buffer The OpenCL buffer to map.
-     * @param flags The mapping flags (e.g., CL_MAP_READ, CL_MAP_WRITE).
-     * @param size The size of data to map in bytes.
-     * @param offset The offset in the buffer from where to start mapping (default is 0).
-     * @return A pointer to the mapped host memory.
+     * @param size The size of the SVM region to create in bytes.
+     * @param device_type The type of device for which to create the SVM region (CPU or GPU).
+     * @return A pointer to the allocated SVM memory that can be used on the host and the device.
      */
-    void *mapHostPtrToPinnedMemory(const cl::Buffer &buffer, cl_map_flags flags, size_t size, DeviceType device_type, size_t offset = 0) const;
+    void *createSVM(size_t size, DeviceType device_type);
     /**
-     * @brief Unmaps the previously mapped OpenCL buffer from pinned host memory.
+     * @brief Frees a previously allocated aligned shared virtual memory (SVM) region.
      *
-     * @param buffer The OpenCL buffer to unmap.
-     * @param host_ptr Pointer to the mapped host memory to unmap.
+     * @param svm_ptr Pointer to the SVM memory to free.
+     * @param device_type The type of device for which the SVM region was created (CPU or GPU).
      */
-    void unMapHostPtr(const cl::Buffer &buffer, void *host_ptr, DeviceType device_type) const;
+    void destroySVM(void *svm_ptr, DeviceType device_type);
+    /**
+     * TODO
+     */
+    void *mapSVM(const cl::Buffer &buffer, size_t size, DeviceType device_type) const;
+    /**
+     * TODO
+     */
+    void unMapSVM(void *host_ptr, DeviceType device_type) const;
+
+    cl::Buffer *getMappedBufferFromHostPtr(void *host_ptr) const;
 
     /**
      * @brief Synchronizes the OpenCL command queue, ensuring that all previously enqueued commands have completed.
@@ -213,7 +228,7 @@ public:
     void synchronize() const;
 
     // --- Getters ---
-    
+
     std::string getBuildOptions(DeviceType device_type) const
     {
         if (device_type == DeviceType::GPU)
