@@ -310,22 +310,47 @@ defmodule OCLPolyHok do
     %Nx.Tensor{data: %Nx.BinaryBackend{state: ref}, type: type, shape: shape, names: name}
   end
 
-  # ------- New NX Functions (they allocate aligned memory) -------
+  # ------- New NX Tensor functions (they allocate aligned memory) -------
 
-  # == Creates a new empty Nx tensor with the specified shape and type
-    def new_nx(l, c, type) do
-      len = l * c
+  # == Creates a new Nx tensor from a list
+  def tensor(list, type: t) when is_list(list), do: tensor(list, t)
 
-      new_bin =
-        case type do
-          {:f, 32} -> new_empty_aligned_nx_nif(len, Kernel.to_charlist("float"))
-          {:f, 64} -> new_empty_aligned_nx_nif(len, Kernel.to_charlist("double"))
-          {:s, 32} -> new_empty_aligned_nx_nif(len, Kernel.to_charlist("int"))
-          x -> raise "new_nx: type #{inspect(x)} not suported"
-        end
-      
-      Nx.from_binary(new_bin, type) |> Nx.reshape({l, c})
+  def tensor(list, type) when is_list(list) do
+    shape = TensorTools.calculate_list_dimensions(list)
+
+    cond do
+      tuple_size(shape) > 3 ->
+        raise "OCLPolyHok.tensor/2: OCL-PolyHok only supports tensors with up to 3 dimensions, but got a tensor with shape #{inspect(shape)}"
+      true ->
+        :ok
     end
+    
+    array_len = case shape do
+      {c} -> c
+      {l, c} -> l * c
+      {l, c, d} -> l * c * d
+    end
+
+    flat_list = List.flatten(list)
+
+    binary =
+      case type do
+        {:f, 32} -> new_aligned_nx_from_list_nif(flat_list, array_len, Kernel.to_charlist("float"))
+        {:f, 64} -> new_aligned_nx_from_list_nif(flat_list, array_len, Kernel.to_charlist("double"))
+        {:s, 32} -> new_aligned_nx_from_list_nif(flat_list, array_len, Kernel.to_charlist("int"))
+        x -> raise "OCLPolyHok.tensor/2: type #{inspect(x)} not suported"
+      end
+    
+    Nx.from_binary(binary, type) |> Nx.reshape(shape)
+  end
+
+  # == Check if a Nx is aligned
+  def is_nx_aligned?(nx) do
+    %Nx.Tensor{data: %Nx.BinaryBackend{state: ref}} = nx
+    is_nx_aligned_nif(ref)
+  end
+
+  # ------- Functions that creates Nx tensors from a function that generates its elements -------
 
   # == Creates a new Nx tensor from a function that generates its elements
   def new_nx_from_function(l, c, type, fun) do
@@ -340,35 +365,6 @@ defmodule OCLPolyHok do
 
     %Nx.Tensor{data: %Nx.BinaryBackend{state: ref}, type: type, shape: {l, c}, names: [nil, nil]}
   end
-
-  # == Creates a new Nx tensor from a list
-  # def new_nx(list, type) when is_list(list) do
-  #   {l, c} =
-  #     case TensorTools.calculate_list_dimensions(list) do
-  #       {c} ->
-  #         {1, c}
-
-  #       {l, c} ->
-  #         {l, c}
-
-  #       {l, c, d} ->
-  #         {l * c, d}
-
-  #       s ->
-  #         raise "new_nx: OCL-PolyHok only supports Nx tensors up to 3 dimensions, but the provided list has #{length(s)} dimensions"
-  #     end
-    
-  #   size = l * c
-  #   flat_list = List.flatten(list)
-
-  #   binary =
-  #     case type do
-  #       {:f, 32} -> new_matrix_from_list_f(list, size - 1, <<>>)
-  #       {:f, 64} -> new_matrix_from_list_d(list, size - 1, <<>>)
-  #       {:s, 32} -> new_matrix_from_list_i(list, size - 1, <<>>)
-  #       x -> raise "new_nx: type #{inspect(x)} not suported"
-  #     end
-  # end
 
   # ----------------- Helper functions for new_nx_from_function -----------------
   defp new_matrix_from_function_d(0, _, accumulator), do: accumulator
@@ -716,8 +712,12 @@ defmodule OCLPolyHok do
     raise "NIF new_array_from_nx_nif/5 not implemented"
   end
 
-  def new_empty_aligned_nx_nif(_len, _type) do
-    raise "NIF new_empty_aligned_nx_nif/2 not implemented"
+  def new_aligned_nx_from_list_nif(_flat_list, _list_len, _type) do
+    raise "NIF new_aligned_nx_from_list_nif/3 not implemented"
+  end
+
+  def is_nx_aligned_nif(_res) do
+    raise "NIF is_nx_aligned_nif/1 not implemented"
   end
 
   def synchronize_nif() do

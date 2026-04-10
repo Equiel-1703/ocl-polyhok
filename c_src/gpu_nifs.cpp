@@ -61,12 +61,11 @@ void cpu_svm_destructor(ErlNifEnv * /* env */, void *res)
 
   try
   {
-
     open_cl->destroySVM(svm_ptr, OCLInterface::DeviceType::CPU);
 
     if (debug_logs)
     {
-      std::cout << "[C++ GPU NIF] CPU SVM resource destroyed." << std::endl;
+      std::cout << "[C++ GPU NIF] CPU SVM array at address " << svm_ptr << " was successfully freed." << std::endl;
     }
   }
   catch (const std::exception &e)
@@ -207,7 +206,7 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
     return enif_make_badarg(env);
   }
 
-  std::string kernel_name(size_name + 1, '\0');
+  std::string kernel_name(size_name, '\0');
   enif_get_string(env, e_name, kernel_name.data(), size_name + 1, ERL_NIF_LATIN1);
 
   // Get kernel code to compile
@@ -218,7 +217,7 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
     return enif_make_badarg(env);
   }
 
-  std::string code(size_code + 1, '\0');
+  std::string code(size_code, '\0');
   enif_get_string(env, e_code, code.data(), size_code + 1, ERL_NIF_LATIN1);
 
   // Creating program and kernel objects
@@ -753,56 +752,75 @@ static ERL_NIF_TERM double_supported_nif(ErlNifEnv *env, int /* argc */, const E
   }
 }
 
-// This function creates a new empty Nx tensor in the CPU memory with the appropriate alignment constraints
-// required by the CPU hardware.
-static ERL_NIF_TERM new_empty_aligned_nx_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+// This function creates a new aligned SVM region on the CPU and copies data to it from the Elixir list provided.
+// It returns an Erlang Resource Binary that points directly to the aligned SVM allocated by OpenCL.
+// Parameters:
+// 1 - A flat list (without nested lists) containing the data to be copied to the SVM memory.
+// 2 - The length of the list (number of elements).
+// 3 - The type of the data (e.g., "float", "int", "double") as an Elixir charlist (a list of characters).
+static ERL_NIF_TERM new_aligned_nx_from_list_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-  if (argc != 2)
+  if (argc != 3)
   {
     return enif_make_badarg(env);
   }
 
-  // Get the length of the array to be created
-  uint32_t len;
-  if (!enif_get_uint(env, argv[0], &len))
+  ERL_NIF_TERM list = argv[0];
+  ERL_NIF_TERM list_length_term = argv[1];
+  ERL_NIF_TERM type_name_term = argv[2];
+
+  // Check if the first argument is a list
+  if (!enif_is_list(env, list))
+  {
+    return enif_make_badarg(env);
+  }
+
+  // Get the length of the list (number of elements)
+  uint32_t list_length;
+  if (!enif_get_uint(env, list_length_term, &list_length))
   {
     return enif_make_badarg(env);
   }
 
   // Get the type of the array to be created (e.g., "float", "int", "double")
-  ERL_NIF_TERM e_type_name = argv[1];
   uint32_t size_type_name;
-
-  if (!enif_get_list_length(env, e_type_name, &size_type_name))
+  if (!enif_get_list_length(env, type_name_term, &size_type_name))
   {
     return enif_make_badarg(env);
   }
 
   std::string type_name(size_type_name, '\0');
-  if (!enif_get_string(env, e_type_name, type_name.data(), size_type_name + 1, ERL_NIF_LATIN1))
+  if (!enif_get_string(env, type_name_term, type_name.data(), size_type_name + 1, ERL_NIF_LATIN1))
   {
     return enif_make_badarg(env);
   }
 
-  // Calculate the size of the data to be allocated based on the type
-  size_t data_size;
+  // Calculate the size in bytes for the SVM array to hold the list data, based on the
+  // data type and the number of elements
+  size_t array_size_bytes;
 
   if (type_name == "float")
   {
-    data_size = sizeof(float) * len;
+    array_size_bytes = sizeof(float) * list_length;
   }
   else if (type_name == "int")
   {
-    data_size = sizeof(int) * len;
+    array_size_bytes = sizeof(int) * list_length;
   }
   else if (type_name == "double")
   {
-    data_size = sizeof(double) * len;
+    array_size_bytes = sizeof(double) * list_length;
   }
   else // Unknown type
   {
-    std::string message = "[ERROR] new_empty_aligned_nx_nif: unknown type: " + type_name;
+    std::string message = "[ERROR] new_aligned_nx_from_list_nif: unknown type: " + type_name;
     return enif_raise_exception(env, enif_make_string(env, message.c_str(), ERL_NIF_LATIN1));
+  }
+
+  if (debug_logs)
+  {
+    std::cout << "[C++ GPU NIF] Creating new aligned SVM array from list with " << list_length << " elements of type <" << type_name << ">." << std::endl;
+    std::cout << "[C++ GPU NIF] Calculated array size in bytes: " << array_size_bytes << " bytes." << std::endl;
   }
 
   try
@@ -810,7 +828,46 @@ static ERL_NIF_TERM new_empty_aligned_nx_nif(ErlNifEnv *env, int argc, const ERL
     // Allocate Shared Virtual Memory (SVM) that is aligned and can be accessed by any CPU core.
     // By default, all OCL-PolyHok's SVMs will be allocated in the CPU for CPU parallel computations.
     // We do not intend to use SVM for GPU computations, because we are already using cl::Buffer for this.
-    void *aligned_mem = open_cl->createSVM(data_size, OCLInterface::DeviceType::CPU);
+    void *aligned_mem = open_cl->createSVM(array_size_bytes, OCLInterface::DeviceType::CPU);
+
+    // Now we can populate the allocated SVM array with the list data
+
+    ERL_NIF_TERM head, tail;
+    size_t index = 0;
+
+    while (enif_get_list_cell(env, list, &head, &tail))
+    {
+      if (type_name == "float")
+      {
+        double value;
+        if (!enif_get_double(env, head, &value))
+        {
+          return enif_make_badarg(env);
+        }
+        static_cast<float *>(aligned_mem)[index] = static_cast<float>(value);
+      }
+      else if (type_name == "int")
+      {
+        int value;
+        if (!enif_get_int(env, head, &value))
+        {
+          return enif_make_badarg(env);
+        }
+        static_cast<int *>(aligned_mem)[index] = value;
+      }
+      else if (type_name == "double")
+      {
+        double value;
+        if (!enif_get_double(env, head, &value))
+        {
+          return enif_make_badarg(env);
+        }
+        static_cast<double *>(aligned_mem)[index] = value;
+      }
+
+      list = tail;
+      index += 1;
+    }
 
     // Allocate an Erlang resource to hold the pointer to the SVM memory.
     void **svm_res = (void **)enif_alloc_resource(CPU_SVM_TYPE, sizeof(void *));
@@ -819,20 +876,64 @@ static ERL_NIF_TERM new_empty_aligned_nx_nif(ErlNifEnv *env, int argc, const ERL
     *svm_res = aligned_mem;
 
     // Creating an Erlang Resource Binary to point directly to the SVM memory
-    // An Erlang Resource Binary will behave like a normal binary in the BEAM, but its data pointer will point
+    // An Erlang Resource Binary will behave like a normal binary in Elixir, but its data pointer will point
     // to the aligned SVM memory OpenCL allocated for us. And when the BEAM garbage collects the Resource Binary,
     // it will call the cpu_svm_destructor we defined, which will free the SVM memory correctly using OpenCL's API.
-    ERL_NIF_TERM resource_bin = enif_make_resource_binary(env, (void *)svm_res, aligned_mem, data_size);
+    ERL_NIF_TERM resource_bin = enif_make_resource_binary(env, (void *)svm_res, aligned_mem, array_size_bytes);
 
-    // Release the resource handle, letting the BEAM manage its lifetime
+    // Release the resource handle letting the BEAM manage its lifetime
     enif_release_resource(svm_res);
 
     // Returning our Resource Binary
     return resource_bin;
   }
-  catch(const std::exception& e)
+  catch (const std::exception &e)
   {
     return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
+  }
+}
+
+static ERL_NIF_TERM is_nx_aligned_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+  if (argc != 1)
+  {
+    return enif_make_badarg(env);
+  }
+
+  // Get the binary
+  ErlNifBinary bin;
+
+  if (!enif_inspect_binary(env, argv[0], &bin))
+  {
+    return enif_make_badarg(env);
+  }
+
+  // Check if it is aligned
+  cl_uint alignment_bytes = open_cl->getCPUAlignmentBytes();
+  uintptr_t ptr_value = reinterpret_cast<uintptr_t>(bin.data);
+
+  // Print the address and the alignment for debugging
+  if (debug_logs)
+  {
+    std::cout << "[C++ GPU NIF] Checking alignment of pointer at address " << static_cast<void *>(bin.data) << std::endl;
+    std::cout << "[C++ GPU NIF] - Alignment requirement: " << alignment_bytes << " bytes." << std::endl;
+  }
+
+  if (ptr_value % alignment_bytes == 0)
+  {
+    if (debug_logs)
+    {
+      std::cout << "[C++ GPU NIF] The pointer IS aligned." << std::endl;
+    }
+    return enif_make_atom(env, "true");
+  }
+  else
+  {
+    if (debug_logs)
+    {
+      std::cout << "[C++ GPU NIF] The pointer is NOT aligned." << std::endl;
+    }
+    return enif_make_atom(env, "false");
   }
 }
 
@@ -848,6 +949,7 @@ static ErlNifFunc nif_funcs[] = {
     {"synchronize_nif", 0, synchronize_nif, 0},
     {"set_debug_logs_nif", 1, set_debug_logs_nif, 0},
     {"double_supported_nif", 0, double_supported_nif, 0},
-    {"new_empty_aligned_nx_nif", 2, new_empty_aligned_nx_nif, 0}};
+    {"new_aligned_nx_from_list_nif", 3, new_aligned_nx_from_list_nif, 0},
+    {"is_nx_aligned_nif", 1, is_nx_aligned_nif, 0}};
 
 ERL_NIF_INIT(Elixir.OCLPolyHok, nif_funcs, &load, NULL, NULL, &unload)

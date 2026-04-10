@@ -59,7 +59,7 @@ private:
     /**
      * @brief Alignment requirement in bytes of the CPU for efficient memory access.
      */
-    cl_uint cpu_alignment_bytes;
+    cl_uint cpu_alignment_bytes = 0;
 
 public:
     /**
@@ -220,8 +220,6 @@ public:
      */
     void unMapSVM(void *host_ptr, DeviceType device_type) const;
 
-    cl::Buffer *getMappedBufferFromHostPtr(void *host_ptr) const;
-
     /**
      * @brief Synchronizes the OpenCL command queue, ensuring that all previously enqueued commands have completed.
      */
@@ -239,5 +237,10 @@ public:
         {
             return build_options_cpu;
         }
+    }
+
+    cl_uint getCPUAlignmentBytes() const
+    {
+        return cpu_alignment_bytes;
     }
 };
