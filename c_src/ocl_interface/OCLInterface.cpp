@@ -335,21 +335,6 @@ void OCLInterface::writeBuffer(const cl::Buffer &buffer, const void *host_ptr, s
     command_queue.enqueueWriteBuffer(buffer, CL_TRUE, offset, size, host_ptr);
 }
 
-void *OCLInterface::mapSVM(const cl::Buffer &buffer, size_t size, DeviceType device_type) const
-{
-    const cl::CommandQueue &command_queue = (device_type == DeviceType::GPU) ? this->gpu_command_queue : this->cpu_command_queue;
-
-    try
-    {
-        // TODO
-    }
-    catch (const cl::Error &e)
-    {
-        std::cerr << "[OCL C++ Interface] Failed to map OpenCL buffer to pinned memory. Error code: " << e.what() << std::endl;
-        throw std::runtime_error("Failed to map OpenCL buffer to pinned memory");
-    }
-}
-
 void *OCLInterface::createSVM(size_t size, OCLInterface::DeviceType device_type)
 {
     cl::Context &context = (device_type == DeviceType::GPU) ? this->gpu_context : this->cpu_context;
@@ -425,22 +410,54 @@ void OCLInterface::destroySVM(void *svm_ptr, DeviceType device_type)
     }
 }
 
-void OCLInterface::unMapSVM(void *host_ptr, DeviceType device_type) const
+void OCLInterface::mapSVM(void *host_ptr, size_t size, DeviceType device_type) const
 {
     const cl::CommandQueue &command_queue = (device_type == DeviceType::GPU) ? this->gpu_command_queue : this->cpu_command_queue;
+    std::string device_type_str = (device_type == DeviceType::GPU) ? "GPU" : "CPU";
 
     try
     {
-        // TODO
+        command_queue.enqueueMapSVM(
+            host_ptr,
+            CL_TRUE,                    // Blocking call to ensure the mapping is complete before returning
+            CL_MAP_READ | CL_MAP_WRITE, // We want to read and write to this memory
+            size);                      // Size of the memory to map
+
+        if (this->debug_logs)
+        {
+            std::cout << "[OCL C++ Interface] Mapped SVM memory for " << device_type_str << " at address " << host_ptr << "." << std::endl;
+        }
     }
-    catch (const std::out_of_range &e)
+    catch (const cl::Error &e)
     {
-        std::cerr << "[OCL C++ Interface] Error: Attempted to unmap a host pointer that was not found in the aligned_memory_map. This may indicate a logic error in memory management." << std::endl;
-        throw std::runtime_error("Host pointer not found in aligned_memory_map during unmapping");
+        std::cerr << "[OCL C++ Interface] Failed to map SVM memory for " << (device_type == DeviceType::GPU ? "GPU" : "CPU") << ". Error code: " << e.what() << std::endl;
+        throw std::runtime_error("Failed to map SVM memory");
     }
 }
 
-void OCLInterface::synchronize() const
+void OCLInterface::unMapSVM(void *host_ptr, DeviceType device_type) const
 {
-    this->gpu_command_queue.finish(); // Wait for all commands up to this point to complete in the command queue
+    const cl::CommandQueue &command_queue = (device_type == DeviceType::GPU) ? this->gpu_command_queue : this->cpu_command_queue;
+    std::string device_type_str = (device_type == DeviceType::GPU) ? "GPU" : "CPU";
+
+    try
+    {
+        command_queue.enqueueUnmapSVM(host_ptr);
+
+        if (this->debug_logs)
+        {
+            std::cout << "[OCL C++ Interface] Unmapped SVM memory for " << device_type_str << " at address " << host_ptr << "." << std::endl;
+        }
+    }
+    catch (const cl::Error &e)
+    {
+        std::cerr << "[OCL C++ Interface] Failed to unmap SVM memory for " << device_type_str << ". Error code: " << e.what() << std::endl;
+        throw std::runtime_error("Failed to unmap SVM memory");
+    }
+}
+
+void OCLInterface::synchronize(DeviceType device_type) const
+{
+    const cl::CommandQueue &command_queue = (device_type == DeviceType::GPU) ? this->gpu_command_queue : this->cpu_command_queue;
+    command_queue.finish();
 }
