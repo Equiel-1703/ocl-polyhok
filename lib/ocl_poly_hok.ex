@@ -214,9 +214,19 @@ defmodule OCLPolyHok do
     %OCLPolyHok.Context{device: :gpu}
   end
 
+  # ------- Helper functions for Nx and GNx creation -------
+  defp get_type_charlist(type) do
+    case type do
+      t when t in [{:f, 32}, :f32] -> Kernel.to_charlist("float")
+      t when t in [{:f, 64}, :f64] -> Kernel.to_charlist("double")
+      t when t in [{:s, 32}, :s32] -> Kernel.to_charlist("int")
+      x -> raise "OCLPolyHok: type #{inspect(x)} is not suported"
+    end
+  end
+
   # ------- New GPU NX Functions -------
 
-  # == Helper functions for new_gnx
+  # == Helper functions for creating a new GNx
   defp new_gnx_from_tensor(array, type, shape, name, device) do
     {l, c} =
       case shape do
@@ -225,13 +235,8 @@ defmodule OCLPolyHok do
         {l1, l2, c} -> {l1 * l2, c}
       end
 
-    ref =
-      case type do
-        {:f, 32} -> new_array_from_nx_nif(array, l, c, Kernel.to_charlist("float"), device)
-        {:f, 64} -> new_array_from_nx_nif(array, l, c, Kernel.to_charlist("double"), device)
-        {:s, 32} -> new_array_from_nx_nif(array, l, c, Kernel.to_charlist("int"), device)
-        x -> raise "new_gnx: type #{inspect(x)} not suported"
-      end
+    t_charlist = get_type_charlist(type)
+    ref = new_array_from_nx_nif(array, l, c, t_charlist, device)
 
     {:nx, type, shape, name, ref}
   end
@@ -244,13 +249,8 @@ defmodule OCLPolyHok do
         {l1, l2, c} -> {l1 * l2, c}
       end
 
-    ref =
-      case type do
-        {:f, 32} -> new_empy_array_nif(l, c, Kernel.to_charlist("float"), device)
-        {:f, 64} -> new_empy_array_nif(l, c, Kernel.to_charlist("double"), device)
-        {:s, 32} -> new_empy_array_nif(l, c, Kernel.to_charlist("int"), device)
-        x -> raise "new_gnx: type #{inspect(x)} not suported"
-      end
+    t_charlist = get_type_charlist(type)
+    ref = new_empty_array_nif(l, c, t_charlist, device)
 
     {:nx, type, shape, [nil], ref}
   end
@@ -282,14 +282,14 @@ defmodule OCLPolyHok do
   # ------- Function to retrieve device arrays (gnx) back to Elixir -------
   def get_gnx(
         %OCLPolyHok.Context{} = ctx,
-        {{:nx, type, shape, name, ref}, %OCLPolyHok.Context{} = gnx_ctx}
+        {{:nx, type, shape, name, gnx_ref}, %OCLPolyHok.Context{} = gnx_ctx}
       ) do
     cond do
       gnx_ctx.device == ctx.device ->
         :ok
 
       true ->
-        raise "Device mismatch: the current context is from device '#{ctx.device}', but the provided GNx argument is in a context with device '#{gnx_ctx.device}'. GNx = #{inspect({:nx, type, shape, name, ref})}"
+        raise "Device mismatch: the current context is from device '#{ctx.device}', but the provided GNx argument is in a context with device '#{gnx_ctx.device}'. GNx = #{inspect({:nx, type, shape, name, gnx_ref})}"
     end
 
     {l, c} =
@@ -299,13 +299,8 @@ defmodule OCLPolyHok do
         {d1, d2, d3} -> {d1 * d2, d3}
       end
 
-    ref =
-      case type do
-        {:f, 32} -> get_device_array_nif(ref, l, c, Kernel.to_charlist("float"), ctx.device)
-        {:f, 64} -> get_device_array_nif(ref, l, c, Kernel.to_charlist("double"), ctx.device)
-        {:s, 32} -> get_device_array_nif(ref, l, c, Kernel.to_charlist("int"), ctx.device)
-        x -> raise "get_gnx: type #{inspect(x)} not suported"
-      end
+    t_charlist = get_type_charlist(type)
+    ref = get_device_array_nif(gnx_ref, l, c, t_charlist, ctx.device)
 
     %Nx.Tensor{data: %Nx.BinaryBackend{state: ref}, type: type, shape: shape, names: name}
   end
@@ -321,26 +316,53 @@ defmodule OCLPolyHok do
     cond do
       tuple_size(shape) > 3 ->
         raise "OCLPolyHok.tensor/2: OCL-PolyHok only supports tensors with up to 3 dimensions, but got a tensor with shape #{inspect(shape)}"
+
       true ->
         :ok
     end
-    
-    array_len = case shape do
-      {c} -> c
-      {l, c} -> l * c
-      {l, c, d} -> l * c * d
-    end
+
+    array_len =
+      case shape do
+        {c} -> c
+        {l, c} -> l * c
+        {l, c, d} -> l * c * d
+      end
 
     flat_list = List.flatten(list)
 
-    binary =
-      case type do
-        {:f, 32} -> new_aligned_nx_from_list_nif(flat_list, array_len, Kernel.to_charlist("float"))
-        {:f, 64} -> new_aligned_nx_from_list_nif(flat_list, array_len, Kernel.to_charlist("double"))
-        {:s, 32} -> new_aligned_nx_from_list_nif(flat_list, array_len, Kernel.to_charlist("int"))
-        x -> raise "OCLPolyHok.tensor/2: type #{inspect(x)} not suported"
+    t_charlist = get_type_charlist(type)
+    binary = new_aligned_nx_from_list_nif(flat_list, array_len, t_charlist)
+
+    Nx.from_binary(binary, type) |> Nx.reshape(shape)
+  end
+
+  # == Creates a new Nx tensor with elements generated from a function
+  def tensor(shape, type, fun) when is_tuple(shape) and is_function(fun) do
+    t_charlist = get_type_charlist(type)
+
+    validate_function(fun, t_charlist)
+
+    array_len =
+      case shape do
+        {c} ->
+          c
+
+        {l, c} ->
+          l * c
+
+        {l, c, d} ->
+          l * c * d
+
+        _ ->
+          raise "OCLPolyHok.tensor/3: shape must be a tuple of 1, 2 or 3 dimensions, but got #{inspect(shape)}"
       end
-    
+
+    list = gen_list_from_function([], array_len, fun)
+
+    IO.inspect(list, label: "OCLPolyHok.tensor/3: generated list from function")
+
+    binary = new_aligned_nx_from_list_nif(list, array_len, t_charlist)
+
     Nx.from_binary(binary, type) |> Nx.reshape(shape)
   end
 
@@ -350,103 +372,147 @@ defmodule OCLPolyHok do
     is_nx_aligned_nif(ref)
   end
 
-  # ------- Functions that creates Nx tensors from a function that generates its elements -------
+  # -- Helpers for generating tensor from function --
 
+  # == Check function arity and return type for OCLPolyHok.tensor/3
+  defp validate_function(fun, type_charlist) when is_function(fun) do
+    if not is_function(fun, 1) do
+      raise "OCLPolyHok.tensor/3: the provided function must receive exactly 1 argument (the current element index), but the provided function has arity #{:erlang.fun_info(fun)[:arity]}"
+    end
+
+    fun_type =
+      case fun.(1) do
+        x when is_float(x) ->
+          :float
+
+        x when is_integer(x) ->
+          :integer
+
+        x ->
+          raise "OCLPolyHok.tensor/3: the provided function must return either float or integer values, but it returned a value of type '#{inspect(x)}'"
+      end
+
+    cond do
+      (type_charlist == ~c"float" or type_charlist == ~c"double") and fun_type == :float ->
+        :ok
+
+      type_charlist == ~c"int" and fun_type == :integer ->
+        :ok
+
+      true ->
+        raise "OCLPolyHok.tensor/3: the return type of the provided function is '#{fun_type}' and the type of the tensor to be created is '#{type_charlist}'"
+    end
+  end
+
+  # == Generates an Elixir list of a given size with the elements generated from a 
+  # function that receives the element index as argument
+  defp gen_list_from_function(list_acc, 0, _fun), do: list_acc
+
+  defp gen_list_from_function(list_acc, size, fun) do
+    el = fun.(size)
+
+    new_list_acc = [el | list_acc]
+
+    gen_list_from_function(new_list_acc, size - 1, fun)
+  end
+
+  # ====== The next functions are deprecated because we now need to allocate the Nx tensors with aligned memory ======
+  #
   # == Creates a new Nx tensor from a function that generates its elements
-  def new_nx_from_function(l, c, type, fun) do
-    size = l * c
+  # def new_nx_from_function(l, c, type, fun) do
+  #   size = l * c
 
-    ref =
-      case type do
-        {:f, 32} -> new_matrix_from_function_f(size - 1, fun, <<fun.()::float-little-32>>)
-        {:f, 64} -> new_matrix_from_function_d(size - 1, fun, <<fun.()::float-little-64>>)
-        {:s, 32} -> new_matrix_from_function_i(size - 1, fun, <<fun.()::integer-little-32>>)
-      end
+  #   ref =
+  #     case type do
+  #       {:f, 32} -> new_matrix_from_function_f(size - 1, fun, <<fun.()::float-little-32>>)
+  #       {:f, 64} -> new_matrix_from_function_d(size - 1, fun, <<fun.()::float-little-64>>)
+  #       {:s, 32} -> new_matrix_from_function_i(size - 1, fun, <<fun.()::integer-little-32>>)
+  #     end
 
-    %Nx.Tensor{data: %Nx.BinaryBackend{state: ref}, type: type, shape: {l, c}, names: [nil, nil]}
-  end
+  #   %Nx.Tensor{data: %Nx.BinaryBackend{state: ref}, type: type, shape: {l, c}, names: [nil, nil]}
+  # end
 
-  # ----------------- Helper functions for new_nx_from_function -----------------
-  defp new_matrix_from_function_d(0, _, accumulator), do: accumulator
+  # # ----------------- Helper functions for new_nx_from_function -----------------
+  # defp new_matrix_from_function_d(0, _, accumulator), do: accumulator
 
-  defp new_matrix_from_function_d(size, function, accumulator),
-    do:
-      new_matrix_from_function_d(
-        size - 1,
-        function,
-        <<accumulator::binary, function.()::float-little-64>>
-      )
+  # defp new_matrix_from_function_d(size, function, accumulator),
+  #   do:
+  #     new_matrix_from_function_d(
+  #       size - 1,
+  #       function,
+  #       <<accumulator::binary, function.()::float-little-64>>
+  #     )
 
-  defp new_matrix_from_function_i(0, _, accumulator), do: accumulator
+  # defp new_matrix_from_function_i(0, _, accumulator), do: accumulator
 
-  defp new_matrix_from_function_i(size, function, accumulator),
-    do:
-      new_matrix_from_function_i(
-        size - 1,
-        function,
-        <<accumulator::binary, function.()::integer-little-32>>
-      )
+  # defp new_matrix_from_function_i(size, function, accumulator),
+  #   do:
+  #     new_matrix_from_function_i(
+  #       size - 1,
+  #       function,
+  #       <<accumulator::binary, function.()::integer-little-32>>
+  #     )
 
-  defp new_matrix_from_function_f(0, _, accumulator), do: accumulator
+  # defp new_matrix_from_function_f(0, _, accumulator), do: accumulator
 
-  defp new_matrix_from_function_f(size, function, accumulator),
-    do:
-      new_matrix_from_function_f(
-        size - 1,
-        function,
-        <<accumulator::binary, function.()::float-little-32>>
-      )
+  # defp new_matrix_from_function_f(size, function, accumulator),
+  #   do:
+  #     new_matrix_from_function_f(
+  #       size - 1,
+  #       function,
+  #       <<accumulator::binary, function.()::float-little-32>>
+  #     )
 
-  # == Creates a new Nx tensor from a function that generates its elements receiving the size as argument
-  def new_nx_from_function_arg(l, c, type, fun) do
-    size = l * c
+  # # == Creates a new Nx tensor from a function that generates its elements receiving the size as argument
+  # def new_nx_from_function_arg(l, c, type, fun) do
+  #   size = l * c
 
-    ref =
-      case type do
-        {:f, 32} ->
-          new_matrix_from_function_f_arg(size - 1, fun, <<fun.(size)::float-little-32>>)
+  #   ref =
+  #     case type do
+  #       {:f, 32} ->
+  #         new_matrix_from_function_f_arg(size - 1, fun, <<fun.(size)::float-little-32>>)
 
-        {:f, 64} ->
-          new_matrix_from_function_d_arg(size - 1, fun, <<fun.(size)::float-little-64>>)
+  #       {:f, 64} ->
+  #         new_matrix_from_function_d_arg(size - 1, fun, <<fun.(size)::float-little-64>>)
 
-        {:s, 32} ->
-          new_matrix_from_function_i_arg(size - 1, fun, <<fun.(size)::integer-little-32>>)
-      end
+  #       {:s, 32} ->
+  #         new_matrix_from_function_i_arg(size - 1, fun, <<fun.(size)::integer-little-32>>)
+  #     end
 
-    %Nx.Tensor{data: %Nx.BinaryBackend{state: ref}, type: type, shape: {l, c}, names: [nil, nil]}
-  end
+  #   %Nx.Tensor{data: %Nx.BinaryBackend{state: ref}, type: type, shape: {l, c}, names: [nil, nil]}
+  # end
 
-  # ----------------- Helper functions for new_nx_from_function_arg -----------------
+  # # ----------------- Helper functions for new_nx_from_function_arg -----------------
 
-  defp new_matrix_from_function_d_arg(0, _, accumulator), do: accumulator
+  # defp new_matrix_from_function_d_arg(0, _, accumulator), do: accumulator
 
-  defp new_matrix_from_function_d_arg(size, function, accumulator),
-    do:
-      new_matrix_from_function_d_arg(
-        size - 1,
-        function,
-        <<accumulator::binary, function.(size)::float-little-64>>
-      )
+  # defp new_matrix_from_function_d_arg(size, function, accumulator),
+  #   do:
+  #     new_matrix_from_function_d_arg(
+  #       size - 1,
+  #       function,
+  #       <<accumulator::binary, function.(size)::float-little-64>>
+  #     )
 
-  defp new_matrix_from_function_i_arg(0, _, accumulator), do: accumulator
+  # defp new_matrix_from_function_i_arg(0, _, accumulator), do: accumulator
 
-  defp new_matrix_from_function_i_arg(size, function, accumulator),
-    do:
-      new_matrix_from_function_i_arg(
-        size - 1,
-        function,
-        <<accumulator::binary, function.(size)::integer-little-32>>
-      )
+  # defp new_matrix_from_function_i_arg(size, function, accumulator),
+  #   do:
+  #     new_matrix_from_function_i_arg(
+  #       size - 1,
+  #       function,
+  #       <<accumulator::binary, function.(size)::integer-little-32>>
+  #     )
 
-  defp new_matrix_from_function_f_arg(0, _, accumulator), do: accumulator
+  # defp new_matrix_from_function_f_arg(0, _, accumulator), do: accumulator
 
-  defp new_matrix_from_function_f_arg(size, function, accumulator),
-    do:
-      new_matrix_from_function_f_arg(
-        size - 1,
-        function,
-        <<accumulator::binary, function.(size)::float-little-32>>
-      )
+  # defp new_matrix_from_function_f_arg(size, function, accumulator),
+  #   do:
+  #     new_matrix_from_function_f_arg(
+  #       size - 1,
+  #       function,
+  #       <<accumulator::binary, function.(size)::float-little-32>>
+  #     )
 
   @doc """
   Loads the Abstract Syntax Tree (AST) for a given kernel or function used inside a kernel.
@@ -700,8 +766,8 @@ defmodule OCLPolyHok do
     raise "NIF double_supported_nif/0 not implemented"
   end
 
-  def new_empy_array_nif(_l, _c, _type, _d) do
-    raise "NIF new_empy_array_nif/4 not implemented"
+  def new_empty_array_nif(_l, _c, _type, _d) do
+    raise "NIF new_empty_array_nif/4 not implemented"
   end
 
   def get_device_array_nif(_gnx, _l, _c, _type, _d) do
