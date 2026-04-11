@@ -616,7 +616,7 @@ static ERL_NIF_TERM new_array_from_nx_nif(ErlNifEnv *env, int /* argc */, const 
 }
 
 // Creates a new empty GPU/CPU array with the specified number of rows, columns, and type
-static ERL_NIF_TERM new_empy_array_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM new_empty_array_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM argv[])
 {
   // Get number of rows and columns
   int nrow, ncol;
@@ -664,7 +664,7 @@ static ERL_NIF_TERM new_empy_array_nif(ErlNifEnv *env, int /* argc */, const ERL
   else // Unknown type
   {
     char message[200];
-    strcpy(message, "[ERROR] new_empy_array_nif: unknown type: ");
+    strcpy(message, "[ERROR] new_empty_array_nif: unknown type: ");
     strcat(message, type_name);
     return enif_raise_exception(env, enif_make_string(env, message, ERL_NIF_LATIN1));
   }
@@ -943,7 +943,7 @@ static ERL_NIF_TERM is_nx_aligned_nif(ErlNifEnv *env, int argc, const ERL_NIF_TE
 // the order they are declared in the struct.
 static ErlNifFunc nif_funcs[] = {
     {"jit_compile_and_launch_nif", 8, jit_compile_and_launch_nif, 0},
-    {"new_empy_array_nif", 4, new_empy_array_nif, 0},
+    {"new_empty_array_nif", 4, new_empty_array_nif, 0},
     {"get_device_array_nif", 5, get_device_array_nif, 0},
     {"new_array_from_nx_nif", 5, new_array_from_nx_nif, 0},
     {"synchronize_nif", 0, synchronize_nif, 0},
