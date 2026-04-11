@@ -384,14 +384,28 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
         strcmp(arg_type_name, "tfloat") == 0 ||
         strcmp(arg_type_name, "tdouble") == 0)
     {
-      cl::Buffer *array_res;
-      if (!enif_get_resource(env, arg, ARRAY_TYPE, (void **)&array_res))
+      if (device_type == OCLInterface::DeviceType::GPU)
       {
-        std::cerr << "[ERROR] Error getting buffer (array) resource for kernel." << std::endl;
-        return enif_make_badarg(env);
-      }
+        cl::Buffer *array_res;
+        if (!enif_get_resource(env, arg, ARRAY_TYPE, (void **)&array_res))
+        {
+          std::cerr << "[ERROR] Error getting buffer (array) resource for kernel." << std::endl;
+          return enif_make_badarg(env);
+        }
 
-      kernel.setArg(i, *array_res);
+        kernel.setArg(i, *array_res);
+      }
+      else if (device_type == OCLInterface::DeviceType::CPU)
+      {
+        void **svm_res;
+        if (!enif_get_resource(env, arg, CPU_SVM_TYPE, (void **)&svm_res))
+        {
+          std::cerr << "[ERROR] Error getting SVM resource for kernel." << std::endl;
+          return enif_make_badarg(env);
+        }
+
+        kernel.setArg(i, *svm_res);
+      }
     }
     else
     {
@@ -407,6 +421,7 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
   try
   {
     open_cl->executeKernel(kernel, global_range, local_range, device_type);
+    open_cl->synchronize(device_type); // Ensure that the kernel execution is completed before proceeding
 
     if (debug_logs)
     {
@@ -703,9 +718,19 @@ static ERL_NIF_TERM new_empty_array_nif(ErlNifEnv *env, int /* argc */, const ER
 }
 
 // This function synchronizes the OpenCL command queue, ensuring that all previously enqueued commands have completed.
-static ERL_NIF_TERM synchronize_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM /* argv */[])
+static ERL_NIF_TERM synchronize_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-  open_cl->synchronize();
+  if(argc != 1)
+  {
+    std::cerr << "[ERROR] Invalid number of arguments for synchronize_nif." << std::endl;
+    return enif_make_badarg(env);
+  }
+
+  // Get device type (GPU or CPU)
+  ERL_NIF_TERM e_device_type = argv[0];
+  OCLInterface::DeviceType device_type = get_device_type(e_device_type, env);
+
+  open_cl->synchronize(device_type);
 
   if (debug_logs)
   {
@@ -937,6 +962,127 @@ static ERL_NIF_TERM is_nx_aligned_nif(ErlNifEnv *env, int argc, const ERL_NIF_TE
   }
 }
 
+// This function unmaps a previously mapped SVM pointer. This will pass ownership of the SVM memory back
+// to OpenCL. It should be called when the SVM memory is no longer needed in Elixir and we want to use it
+// inside a kernel.
+// Parameters:
+// 1 - The Resource Binary that points to the SVM memory to be unmapped.
+static ERL_NIF_TERM unmap_nx_svm_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+  if (argc != 1)
+  {
+    return enif_make_badarg(env);
+  }
+
+  ERL_NIF_TERM svm_bin_term = argv[0];
+
+  // Get the Resource Binary that points to the SVM memory
+  ErlNifBinary svm_bin;
+  if (!enif_inspect_binary(env, svm_bin_term, &svm_bin))
+  {
+    return enif_make_badarg(env);
+  }
+
+  // Unmap the SVM memory, passing ownership back to OpenCL
+  try
+  {
+    open_cl->unMapSVM(static_cast<void *>(svm_bin.data), OCLInterface::DeviceType::CPU);
+
+    if (debug_logs)
+    {
+      std::cout << "[C++ GPU NIF] SVM memory unmapped successfully, ownership passed back to OpenCL." << std::endl;
+    }
+
+    return enif_make_int(env, 0);
+  }
+  catch (const std::exception &e)
+  {
+    return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
+  }
+}
+
+// Maps a previously allocated SVM pointer to the host address space, allowing Elixir code to access and manipulate the SVM memory directly.
+// This is needed so the host can safely read/write to the SVM memory before passing it to a kernel for parallel computation inside the device.
+// Parameters:
+// 1 - The Resource Binary that points to the SVM memory to be mapped.
+// 2 - The length of the SVM array (number of elements).
+// 3 - The type of the data in the SVM array (e.g., "float", "int", "double") as an Elixir charlist (a list of characters).
+static ERL_NIF_TERM map_nx_svm_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+  if (argc != 3)
+  {
+    return enif_make_badarg(env);
+  }
+
+  ERL_NIF_TERM svm_bin_term = argv[0];
+  ERL_NIF_TERM list_length_term = argv[1];
+  ERL_NIF_TERM type_name_term = argv[2];
+
+  // Get the Resource Binary that points to the SVM memory
+  ErlNifBinary svm_bin;
+  if (!enif_inspect_binary(env, svm_bin_term, &svm_bin))
+  {
+    return enif_make_badarg(env);
+  }
+
+  // Get the length of the SVM array (number of elements)
+  uint32_t list_length;
+  if (!enif_get_uint(env, list_length_term, &list_length))
+  {
+    return enif_make_badarg(env);
+  }
+
+  // Get the type of the data in the SVM array (e.g., "float", "int", "double")
+  uint32_t size_type_name;
+  if (!enif_get_list_length(env, type_name_term, &size_type_name))
+  {
+    return enif_make_badarg(env);
+  }
+
+  std::string type_name(size_type_name, '\0');
+  if (!enif_get_string(env, type_name_term, type_name.data(), size_type_name + 1, ERL_NIF_LATIN1))
+  {
+    return enif_make_badarg(env);
+  }
+
+  // Calculate the size in bytes of the SVM array based on the data type and the number of elements
+  size_t array_size_bytes;
+  if (type_name == "float")
+  {
+    array_size_bytes = sizeof(float) * list_length;
+  }
+  else if (type_name == "int")
+  {
+    array_size_bytes = sizeof(int) * list_length;
+  }
+  else if (type_name == "double")
+  {
+    array_size_bytes = sizeof(double) * list_length;
+  }
+  else // Unknown type
+  {
+    std::string message = "[ERROR] map_nx_svm_nif: unknown type: " + type_name;
+    return enif_raise_exception(env, enif_make_string(env, message.c_str(), ERL_NIF_LATIN1));
+  }
+
+  // Map the SVM memory to the host address space, allowing Elixir code to access it directly and safely
+  try
+  {
+    open_cl->mapSVM(static_cast<void *>(svm_bin.data), array_size_bytes, OCLInterface::DeviceType::CPU);
+
+    if (debug_logs)
+    {
+      std::cout << "[C++ GPU NIF] SVM memory mapped to host address space successfully." << std::endl;
+    }
+
+    return enif_make_int(env, 0);
+  }
+  catch (const std::exception &e)
+  {
+    return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
+  }
+}
+
 // The ErlNifFunc struct in the Erlang headers expects the arguments in this exact order: name, arity, fptr, flags.
 // I'm using this syntax because the designated initializer syntax was not adopted in C++ until C++20, and this project
 // uses C++17. Therefore, I'm using the traditional aggregate initialization syntax, which requires the fields to be in
@@ -946,10 +1092,12 @@ static ErlNifFunc nif_funcs[] = {
     {"new_empty_array_nif", 4, new_empty_array_nif, 0},
     {"get_device_array_nif", 5, get_device_array_nif, 0},
     {"new_array_from_nx_nif", 5, new_array_from_nx_nif, 0},
-    {"synchronize_nif", 0, synchronize_nif, 0},
+    {"synchronize_nif", 1, synchronize_nif, 0},
     {"set_debug_logs_nif", 1, set_debug_logs_nif, 0},
     {"double_supported_nif", 0, double_supported_nif, 0},
     {"new_aligned_nx_from_list_nif", 3, new_aligned_nx_from_list_nif, 0},
-    {"is_nx_aligned_nif", 1, is_nx_aligned_nif, 0}};
+    {"is_nx_aligned_nif", 1, is_nx_aligned_nif, 0},
+    {"map_nx_svm_nif", 3, map_nx_svm_nif, 0},
+    {"unmap_nx_svm_nif", 1, unmap_nx_svm_nif, 0}};
 
 ERL_NIF_INIT(Elixir.OCLPolyHok, nif_funcs, &load, NULL, NULL, &unload)
