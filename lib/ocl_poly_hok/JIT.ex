@@ -520,11 +520,20 @@ defmodule JIT do
 
   def infer_types_actual_parameters([h | t]) do
     case h do
+      # Aligned Nx
+      %Nx.Tensor{type: type} ->
+        case type do
+          tp when tp in [:f32, {:f, 32}] -> [:tfloat | infer_types_actual_parameters(t)]
+          tp when tp in [:f64, {:f, 64}] -> [:tdouble | infer_types_actual_parameters(t)]
+          tp when tp in [:s32, {:s, 32}] -> [:tint | infer_types_actual_parameters(t)]
+        end
+
+      # GNx
       {:nx, type, _shape, _name, _ref} ->
         case type do
-          {:f, 32} -> [:tfloat | infer_types_actual_parameters(t)]
-          {:f, 64} -> [:tdouble | infer_types_actual_parameters(t)]
-          {:s, 32} -> [:tint | infer_types_actual_parameters(t)]
+          tp when tp in [:f32, {:f, 32}] -> [:tfloat | infer_types_actual_parameters(t)]
+          tp when tp in [:f64, {:f, 64}] -> [:tdouble | infer_types_actual_parameters(t)]
+          tp when tp in [:s32, {:s, 32}] -> [:tint | infer_types_actual_parameters(t)]
         end
 
       {:matrex, _kref, _size} ->

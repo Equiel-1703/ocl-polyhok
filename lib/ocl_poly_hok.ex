@@ -180,8 +180,8 @@ defmodule OCLPolyHok do
 
   # ----------------- Synchronize function -----------------
 
-  def synchronize() do
-    synchronize_nif()
+  def synchronize(%OCLPolyHok.Context{device: d}) do
+    synchronize_nif(d)
   end
 
   # ----------------- Set debug logs function -----------------
@@ -569,8 +569,88 @@ defmodule OCLPolyHok do
     end
   end
 
-  # ----------------- JIT compilation and kernel spawning -----------------
+  # -------------------- Helper functions for spawn --------------------
+  defp unmap_nx_tensor(%Nx.Tensor{data: %Nx.BinaryBackend{state: svm_ref}}) do
+    unmap_nx_svm_nif(svm_ref)
+  end
 
+  defp map_nx_tensor(%Nx.Tensor{data: %Nx.BinaryBackend{state: svm_ref}, type: type, shape: shape}) do
+    svm_len =
+      case shape do
+        {c} -> c
+        {l, c} -> l * c
+        {l, c, d} -> l * c * d
+      end
+
+    t_charlist = get_type_charlist(type)
+
+    map_nx_svm_nif(svm_ref, svm_len, t_charlist)
+  end
+
+  defp map_all_nx_tensors(args) do
+    Enum.each(args, fn arg ->
+      case arg do
+        %Nx.Tensor{} = nx ->
+          map_nx_tensor(nx)
+
+        _ ->
+          :ok
+      end
+    end)
+  end
+
+  defp process_cpu_kernel_args(args) do
+    Enum.map(args, fn arg ->
+      case arg do
+        # Check if it's a GNx tensor
+        {{:nx, _type, _shape, _name, _ref}, _gnx_ctx} ->
+          raise "In a CPU context, GNx tensors cannot be used as kernel arguments. Found argument: #{inspect(arg)}"
+
+        # If it's an Nx tensor, it must be aligned
+        %Nx.Tensor{} = nx ->
+          if not is_nx_aligned?(nx) do
+            raise "In a CPU context, all Nx tensors used as kernel arguments must be aligned. Found unaligned tensor: #{inspect(nx)}"
+          end
+
+          # We also need to unmap the Nx tensor. This tells OpenCL that Elixir is done accessing the tensor data, 
+          # and the device can now have it.
+          unmap_nx_tensor(nx)
+
+          # Return the Nx tensor
+          nx
+
+        # Anything else we keep as is
+        e ->
+          e
+      end
+    end)
+  end
+
+  defp process_gpu_kernel_args(args, ctx) do
+    Enum.map(args, fn arg ->
+      case arg do
+        # Check if it's a GNx tensor
+        {{:nx, _type, _shape, _name, _ref} = gnx, gnx_ctx} ->
+          # For now, we are only checking if the devices match. In the future, we may need to check other things.
+          if gnx_ctx.device != ctx.device do
+            raise "Device mismatch: the current context is from device '#{ctx.device}', but the provided GNx argument is in a context with device '#{gnx_ctx.device}'. GNx = #{inspect(arg)}"
+          end
+
+          # If everything is fine, we return only the gnx part. The context is no longer needed
+          gnx
+
+        # If it's an Nx tensor, we can't accept! They are only valid in CPU contexts.
+        %Nx.Tensor{} = nx ->
+          raise "In a GPU context, Nx tensors cannot be used as kernel arguments. Found argument: #{inspect(nx)}"
+
+        # Anything else we keep as is
+        e ->
+          e
+      end
+    end)
+  end
+
+  # ----------------------- Spawn function -----------------------
   @doc """
   Spwans a kernel with JIT compilation.
 
@@ -585,27 +665,20 @@ defmodule OCLPolyHok do
     - `l`: A list of arguments to be passed to the kernel.
   """
   def spawn(%OCLPolyHok.Context{} = ctx, k, t, b, l) do
+    # Process the kernel arguments based on the device context.
+    l =
+      cond do
+        ctx.device == :cpu ->
+          process_cpu_kernel_args(l)
+
+        ctx.device == :gpu ->
+          process_gpu_kernel_args(l, ctx)
+      end
+
+    IO.inspect(l, label: "Processed kernel arguments")
+
     # Get kernel name from the kernel function reference.
     kernel_name = JIT.get_kernel_name(k)
-
-    # Inspect GNx arguments for the kernel to ensure there is no device mismatch.
-    # If a GNx argument is in a different context (device) than the current kernel context, an error is raised.
-    l =
-      Enum.map(l, fn el ->
-        case el do
-          {{:nx, _, _, _, _} = gnx, %OCLPolyHok.Context{} = gnx_ctx} ->
-            cond do
-              gnx_ctx.device == ctx.device ->
-                gnx
-
-              true ->
-                raise "Device mismatch: the kernel is being executed in a context with device '#{ctx.device}', but one of the provided GNx argument is in a context with device '#{gnx_ctx.device}'. GNx = #{inspect(gnx)}"
-            end
-
-          _ ->
-            el
-        end
-      end)
 
     # Load, from the module_server, the AST and function graph for the kernel.
     {kast, fun_graph} =
@@ -617,6 +690,8 @@ defmodule OCLPolyHok do
     # Generates a map called 'delta' that maps the formal parameters of the kernel to the inferred types
     # of the actual parameters provided to the kernel (contained in the list `l`).
     delta = JIT.gen_types_delta(kast, l)
+
+    IO.inspect(delta, label: "Initial delta map with kernel parameters types")
 
     # FIRST, we need to infer the signature types of all functions used in the kernel (return type and args types)
     # This is needed to correctly infer the types of the kernel's internal variables and parameters, since they may depend on the return
@@ -733,6 +808,13 @@ defmodule OCLPolyHok do
       args,
       ctx.device
     )
+
+    case ctx.device do
+      # We need to map the Nx tensors before returning so Elixir can access their data again
+      :cpu -> map_all_nx_tensors(l)
+      # In a GPU context, we don't need to do anything after launching the kernel
+      :gpu -> :ok
+    end
   end
 
   defp process_args_no_fun([]), do: []
@@ -749,6 +831,12 @@ defmodule OCLPolyHok do
     process_args_no_fun(t1)
   end
 
+  # Aligned Nx tensors
+  defp process_args_no_fun([%Nx.Tensor{data: %Nx.BinaryBackend{state: svm_ref}} | t1]) do
+    [svm_ref | process_args_no_fun(t1)]
+  end
+
+  # GNx
   defp process_args_no_fun([{:nx, _type, _shape, _name, ref} | t1]) do
     [ref | process_args_no_fun(t1)]
   end
@@ -782,12 +870,20 @@ defmodule OCLPolyHok do
     raise "NIF new_aligned_nx_from_list_nif/3 not implemented"
   end
 
+  def map_nx_svm_nif(_svm_ref, _arr_len, _type) do
+    raise "NIF map_nx_svm_nif/3 not implemented"
+  end
+
+  def unmap_nx_svm_nif(_svm_ref) do
+    raise "NIF unmap_nx_svm_nif/1 not implemented"
+  end
+
   def is_nx_aligned_nif(_res) do
     raise "NIF is_nx_aligned_nif/1 not implemented"
   end
 
-  def synchronize_nif() do
-    raise "NIF syncronize_nif/0 not implemented"
+  def synchronize_nif(_d) do
+    raise "NIF syncronize_nif/1 not implemented"
   end
 
   def jit_compile_and_launch_nif(_n, _k, _t, _b, _size, _types, _l, _d) do
