@@ -128,21 +128,14 @@ defmodule OCLPolyHok do
 
   # ----------------- With Macro ------------------
   defmacro with(ctx, do: body) do
-    IO.puts("Received body in macro:\n\n#{Macro.to_string(body)}\n")
-
     new_body = process_with_body(body, ctx)
 
-    IO.puts("New body:\n\n#{Macro.to_string(new_body)}\n")
-
     quote do
-      IO.puts("Working on context of device: #{unquote(ctx).device}")
-
-      # Returning the new modified body
       unquote(new_body)
     end
   end
 
-  # == Helper functions of with macro ==
+  # == Helper functions of 'with' macro ==
   defp process_with_body({:__block__, _, commands}, ctx) do
     new_commands = Enum.map(commands, fn command -> process_with_command(command, ctx) end)
     {:__block__, [], new_commands}
@@ -307,9 +300,10 @@ defmodule OCLPolyHok do
 
   # ------- New NX Tensor functions (they allocate aligned memory) -------
 
-  # == Creates a new Nx tensor from a list
+  # == tensor/2 clauses
   def tensor(list, type: t) when is_list(list), do: tensor(list, t)
 
+  # Tensor from Elixir list
   def tensor(list, type) when is_list(list) do
     shape = TensorTools.calculate_list_dimensions(list)
 
@@ -336,7 +330,49 @@ defmodule OCLPolyHok do
     Nx.from_binary(binary, type) |> Nx.reshape(shape)
   end
 
-  # == Creates a new Nx tensor with elements generated from a function
+  # Empty tensor
+  def tensor(shape, type: t) when is_tuple(shape), do: tensor(shape, t)
+
+  def tensor(shape, type) when is_tuple(shape) do
+    array_len =
+      case shape do
+        {c} ->
+          c
+
+        {l, c} ->
+          l * c
+
+        {l, c, d} ->
+          l * c * d
+
+        _ ->
+          raise "OCLPolyHok.tensor/2: shape must be a tuple of 1, 2 or 3 dimensions, but got #{inspect(shape)}"
+      end
+
+    t_charlist = get_type_charlist(type)
+    binary = new_empty_aligned_nx_nif(array_len, t_charlist)
+
+    Nx.from_binary(binary, type) |> Nx.reshape(shape)
+  end
+
+  def tensor(shape, type: t, fun: f) when is_tuple(shape) and is_function(f),
+    do: tensor(shape, t, f)
+
+  # == tensor/3 clauses
+  def tensor(%OCLPolyHok.Context{} = ctx, list, type: t) when is_list(list),
+    do: tensor(ctx, list, t)
+
+  def tensor(%OCLPolyHok.Context{} = ctx, list, type) when is_list(list) do
+    cond do
+      ctx.device == :cpu ->
+        tensor(list, type)
+
+      true ->
+        raise "Creating Nx tensors is only allowed in CPU contexts, but the current context is from device '#{ctx.device}'"
+    end
+  end
+
+  # Tensor from Elixir function
   def tensor(shape, type, fun) when is_tuple(shape) and is_function(fun) do
     t_charlist = get_type_charlist(type)
 
@@ -359,14 +395,29 @@ defmodule OCLPolyHok do
 
     list = gen_list_from_function([], array_len, fun)
 
-    IO.inspect(list, label: "OCLPolyHok.tensor/3: generated list from function")
-
     binary = new_aligned_nx_from_list_nif(list, array_len, t_charlist)
 
     Nx.from_binary(binary, type) |> Nx.reshape(shape)
   end
 
-  # == Check if a Nx is aligned
+  def tensor(%OCLPolyHok.Context{} = ctx, shape, type: t, fun: f)
+      when is_tuple(shape) and is_function(f),
+      do: tensor(ctx, shape, t, f)
+
+  # == tensor/4 clauses
+  def tensor(%OCLPolyHok.Context{} = ctx, shape, type, fun)
+      when is_tuple(shape) and is_function(fun) do
+    cond do
+      ctx.device == :cpu ->
+        tensor(shape, type, fun)
+
+      true ->
+        raise "Creating Nx tensors is only allowed in CPU contexts, but the current context is from device '#{ctx.device}'"
+    end
+  end
+
+  # ------- Check if a Nx is aligned -------
+
   def is_nx_aligned?(nx) do
     %Nx.Tensor{data: %Nx.BinaryBackend{state: ref}} = nx
     is_nx_aligned_nif(ref)
@@ -675,8 +726,6 @@ defmodule OCLPolyHok do
           process_gpu_kernel_args(l, ctx)
       end
 
-    IO.inspect(l, label: "Processed kernel arguments")
-
     # Get kernel name from the kernel function reference.
     kernel_name = JIT.get_kernel_name(k)
 
@@ -690,8 +739,6 @@ defmodule OCLPolyHok do
     # Generates a map called 'delta' that maps the formal parameters of the kernel to the inferred types
     # of the actual parameters provided to the kernel (contained in the list `l`).
     delta = JIT.gen_types_delta(kast, l)
-
-    IO.inspect(delta, label: "Initial delta map with kernel parameters types")
 
     # FIRST, we need to infer the signature types of all functions used in the kernel (return type and args types)
     # This is needed to correctly infer the types of the kernel's internal variables and parameters, since they may depend on the return
@@ -726,7 +773,7 @@ defmodule OCLPolyHok do
       Map.values(inf_types) |> Enum.any?(fn x -> x == :double or x == :tdouble end)
 
     # If double precision is used, check if the device supports it.
-    if contains_double and not double_supported_nif() do
+    if contains_double and not double_supported_nif(ctx.device) do
       raise "[OCL-PolyHok] Your OpenCL device does not support double precision floating point operations (fp64). The 'double' data type cannot be used in kernels."
     end
 
@@ -783,11 +830,7 @@ defmodule OCLPolyHok do
     if debug_logs do
       IO.puts("===== Generated OpenCL code for kernel '#{kernel_name}' =====")
 
-      # We don't print the includes to reduce clutter
-      case comp do
-        [] -> IO.puts(kernel)
-        l -> IO.puts(Enum.reduce(l, "", fn x, y -> y <> x end) <> kernel)
-      end
+      IO.puts(prog)
 
       IO.puts("==============================================================")
     end
@@ -850,8 +893,8 @@ defmodule OCLPolyHok do
     raise "NIF set_debug_logs_nif/1 not implemented"
   end
 
-  def double_supported_nif() do
-    raise "NIF double_supported_nif/0 not implemented"
+  def double_supported_nif(_d) do
+    raise "NIF double_supported_nif/1 not implemented"
   end
 
   def new_empty_array_nif(_l, _c, _type, _d) do
@@ -868,6 +911,10 @@ defmodule OCLPolyHok do
 
   def new_aligned_nx_from_list_nif(_flat_list, _list_len, _type) do
     raise "NIF new_aligned_nx_from_list_nif/3 not implemented"
+  end
+
+  def new_empty_aligned_nx_nif(_len, _type) do
+    raise "NIF new_empty_aligned_nx_nif/2 not implemented"
   end
 
   def map_nx_svm_nif(_svm_ref, _arr_len, _type) do
