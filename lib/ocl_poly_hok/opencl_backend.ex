@@ -440,6 +440,9 @@ defmodule OCLPolyHok.OpenCLBackend do
 
       {:return, _, [arg]} ->
         "return (#{gen_exp(arg)});"
+      
+      {:return, _, nil} ->
+        "return;"
 
       {fun, _, args} when is_list(args) ->
         # module = get_module_name()

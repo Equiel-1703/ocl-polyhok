@@ -14,6 +14,9 @@ defmodule OCLPolyHok.TypeInference do
                        {:fmaxf, {:float, [:float, :float]}},
                        {:min, {:float, [:float, :float]}},
                        {:fminf, {:float, [:float, :float]}},
+                       {:cas_int, {:int, [:int, :int, :int]}},
+                       {:cas_float, {:float, [:float, :float, :float]}},
+                       {:cas_double, {:double, [:double, :double, :double]}},
                        {:sin, {:float, [:float]}},
                        {:cos, {:float, [:float]}},
                        {:tan, {:float, [:float]}},
@@ -25,6 +28,7 @@ defmodule OCLPolyHok.TypeInference do
                        {:fabs, {:float, [:float]}},
                        {:fmod, {:float, [:float, :float]}},
                        {:clamp, {:float, [:float, :float, :float]}},
+                       {:__syncthreads, {:unit, []}}
                      ])
 
   def set_debug_logs(value) do
@@ -527,6 +531,9 @@ defmodule OCLPolyHok.TypeInference do
       {:type, _, [{var, _, [type]}]} ->
         map
         |> Map.put(var, type)
+
+      {:return, _, nil} ->
+        map
 
       {:return, _, [arg]} ->
         case map[:return] do

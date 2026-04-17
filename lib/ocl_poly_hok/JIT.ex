@@ -873,6 +873,9 @@ defmodule JIT do
       {:return, _i, [arg]} ->
         #     IO.inspect "Aqui3"
         find_function_calls_exp(map, arg)
+      
+      {:return, _i, nil} ->
+        map
 
       {fun, _info, args} when is_list(args) ->
         #    IO.inspect "Aqui3 #{length args} #{inspect fun}"
