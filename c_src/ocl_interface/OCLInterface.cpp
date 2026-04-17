@@ -113,9 +113,11 @@ void OCLInterface::selectPlatformsAndDevices()
         throw std::runtime_error("Required OpenCL devices not found");
     }
 
-    // ---- for debug only, remove this stuff later ----
-    std::cout << "Selected GPU: " << this->gpu.getInfo<CL_DEVICE_NAME>() << " from platform " << this->gpu_platform.getInfo<CL_PLATFORM_NAME>() << std::endl;
-    std::cout << "Selected CPU: " << this->cpu.getInfo<CL_DEVICE_NAME>() << " from platform " << this->cpu_platform.getInfo<CL_PLATFORM_NAME>() << std::endl;
+    if (debug_logs)
+    {
+        std::cout << "Selected GPU: " << this->gpu.getInfo<CL_DEVICE_NAME>() << " from platform " << this->gpu_platform.getInfo<CL_PLATFORM_NAME>() << std::endl;
+        std::cout << "Selected CPU: " << this->cpu.getInfo<CL_DEVICE_NAME>() << " from platform " << this->cpu_platform.getInfo<CL_PLATFORM_NAME>() << std::endl;
+    }
 
     // Creating contexts and command queues for the selected devices
     this->gpu_context = cl::Context(this->gpu);
@@ -164,12 +166,13 @@ cl::Program OCLInterface::createProgram(std::string &program_code, OCLInterface:
 {
     cl::Context &context = (device_type == DeviceType::GPU) ? this->gpu_context : this->cpu_context;
     cl::Device &device = (device_type == DeviceType::GPU) ? this->gpu : this->cpu;
+    std::string &build_options = (device_type == DeviceType::GPU) ? this->build_options_gpu : this->build_options_cpu;
 
     cl::Program program(context, program_code);
 
     try
     {
-        program.build(device, this->build_options_gpu.c_str());
+        program.build(device, build_options.c_str());
     }
     catch (const cl::BuildError &err)
     {

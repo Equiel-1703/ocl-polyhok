@@ -21,8 +21,12 @@
 #include <chrono>
 
 bool debug_logs = false;
-bool fp64_supported = false;
-bool int64_base_atomics_supported = false;
+
+bool gpu_fp64_supported = false;
+bool gpu_int64_base_atomics_supported = false;
+
+bool cpu_fp64_supported = false;
+bool cpu_int64_base_atomics_supported = false;
 
 OCLInterface *open_cl = nullptr;
 
@@ -91,30 +95,48 @@ void init_ocl(ErlNifEnv *env)
 
     // Check for double data type support in GPU and int64 atomics support (required for compare and swap (CAS) operations)
     std::vector<std::string> desired_extensions = {"cl_khr_fp64", "cl_khr_int64_base_atomics"};
-    std::vector<std::pair<std::string, bool>> extensions_supported = open_cl->checkDeviceExtensions(desired_extensions, OCLInterface::DeviceType::GPU);
+    std::vector<std::pair<std::string, bool>> gpu_extensions_supported = open_cl->checkDeviceExtensions(desired_extensions, OCLInterface::DeviceType::GPU);
+    std::vector<std::pair<std::string, bool>> cpu_extensions_supported = open_cl->checkDeviceExtensions(desired_extensions, OCLInterface::DeviceType::CPU);
 
     // Update global flags for extension support
-    for (const auto &ext : extensions_supported)
+    for (const auto &ext : gpu_extensions_supported)
     {
       if (ext.first == "cl_khr_fp64")
       {
-        fp64_supported = ext.second;
+        gpu_fp64_supported = ext.second;
       }
       else if (ext.first == "cl_khr_int64_base_atomics")
       {
-        int64_base_atomics_supported = ext.second;
+        gpu_int64_base_atomics_supported = ext.second;
+      }
+    }
+    for (const auto &ext : cpu_extensions_supported)
+    {
+      if (ext.first == "cl_khr_fp64")
+      {
+        cpu_fp64_supported = ext.second;
+      }
+      else if (ext.first == "cl_khr_int64_base_atomics")
+      {
+        cpu_int64_base_atomics_supported = ext.second;
       }
     }
 
     // If both extensions are supported, then the selected GPU can handle the double type
-    if (fp64_supported && int64_base_atomics_supported)
+    if (gpu_fp64_supported && gpu_int64_base_atomics_supported)
     {
       // Define flag for double support in OpenCL build options
       open_cl->setBuildOptions("-D DOUBLE_SUPPORTED=1", OCLInterface::DeviceType::GPU);
     }
+    if (cpu_fp64_supported && cpu_int64_base_atomics_supported)
+    {
+      // Define flag for double support in OpenCL build options
+      open_cl->setBuildOptions("-D DOUBLE_SUPPORTED=1", OCLInterface::DeviceType::CPU);
+    }
 
-    // Add ignore warnings build option (regardless of double support) in the GPU
+    // Add ignore warnings build option (regardless of double support) in the GPU and CPU
     open_cl->setBuildOptions(open_cl->getBuildOptions(OCLInterface::DeviceType::GPU) + " -w", OCLInterface::DeviceType::GPU);
+    open_cl->setBuildOptions(open_cl->getBuildOptions(OCLInterface::DeviceType::CPU) + " -w", OCLInterface::DeviceType::CPU);
   }
   catch (const std::exception &e)
   {
@@ -720,7 +742,7 @@ static ERL_NIF_TERM new_empty_array_nif(ErlNifEnv *env, int /* argc */, const ER
 // This function synchronizes the OpenCL command queue, ensuring that all previously enqueued commands have completed.
 static ERL_NIF_TERM synchronize_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-  if(argc != 1)
+  if (argc != 1)
   {
     std::cerr << "[ERROR] Invalid number of arguments for synchronize_nif." << std::endl;
     return enif_make_badarg(env);
@@ -763,18 +785,38 @@ static ERL_NIF_TERM set_debug_logs_nif(ErlNifEnv *env, int argc, const ERL_NIF_T
   return enif_make_int(env, 0);
 }
 
-// This function checks if the current GPU supports double precision floating points
+// This function checks if the provided device supports double precision floating points
 // and int64 base atomics extensions for CAS
-static ERL_NIF_TERM double_supported_nif(ErlNifEnv *env, int /* argc */, const ERL_NIF_TERM /* argv */[])
+static ERL_NIF_TERM double_supported_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-  if (fp64_supported && int64_base_atomics_supported)
+  if (argc != 1)
   {
-    return enif_make_atom(env, "true");
+    std::cerr << "[ERROR] Invalid number of arguments for double_supported_nif." << std::endl;
+    return enif_make_badarg(env);
   }
-  else
+
+  // Get device type (GPU or CPU)
+  ERL_NIF_TERM e_device_type = argv[0];
+  OCLInterface::DeviceType device_type = get_device_type(e_device_type, env);
+
+  switch (device_type)
   {
-    return enif_make_atom(env, "false");
+  case OCLInterface::DeviceType::GPU:
+    if (gpu_fp64_supported && gpu_int64_base_atomics_supported)
+    {
+      return enif_make_atom(env, "true");
+    }
+    break;
+
+  case OCLInterface::DeviceType::CPU:
+    if (cpu_fp64_supported && cpu_int64_base_atomics_supported)
+    {
+      return enif_make_atom(env, "true");
+    }
+    break;
   }
+
+  return enif_make_atom(env, "false");
 }
 
 // This function creates a new aligned SVM region on the CPU and copies data to it from the Elixir list provided.
@@ -893,6 +935,99 @@ static ERL_NIF_TERM new_aligned_nx_from_list_nif(ErlNifEnv *env, int argc, const
       list = tail;
       index += 1;
     }
+
+    // Allocate an Erlang resource to hold the pointer to the SVM memory.
+    void **svm_res = (void **)enif_alloc_resource(CPU_SVM_TYPE, sizeof(void *));
+
+    // Store the pointer to the SVM memory in the resource
+    *svm_res = aligned_mem;
+
+    // Creating an Erlang Resource Binary to point directly to the SVM memory
+    // An Erlang Resource Binary will behave like a normal binary in Elixir, but its data pointer will point
+    // to the aligned SVM memory OpenCL allocated for us. And when the BEAM garbage collects the Resource Binary,
+    // it will call the cpu_svm_destructor we defined, which will free the SVM memory correctly using OpenCL's API.
+    ERL_NIF_TERM resource_bin = enif_make_resource_binary(env, (void *)svm_res, aligned_mem, array_size_bytes);
+
+    // Release the resource handle letting the BEAM manage its lifetime
+    enif_release_resource(svm_res);
+
+    // Returning our Resource Binary
+    return resource_bin;
+  }
+  catch (const std::exception &e)
+  {
+    return enif_raise_exception(env, enif_make_string(env, e.what(), ERL_NIF_LATIN1));
+  }
+}
+
+// This function creates a new aligned SVM region on the CPU with non-initialized data (garbage).
+// It returns an Erlang Resource Binary that points directly to the aligned SVM allocated by OpenCL.
+// Parameters:
+// 1 - The length of the list (number of elements).
+// 2 - The type of the data (e.g., "float", "int", "double") as an Elixir charlist (a list of characters).
+static ERL_NIF_TERM new_empty_aligned_nx_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+  if (argc != 2)
+  {
+    return enif_make_badarg(env);
+  }
+
+  ERL_NIF_TERM nx_length_term = argv[0];
+  ERL_NIF_TERM type_name_term = argv[1];
+
+  // Get the length of the list (number of elements)
+  uint32_t nx_length;
+  if (!enif_get_uint(env, nx_length_term, &nx_length))
+  {
+    return enif_make_badarg(env);
+  }
+
+  // Get the type of the array to be created (e.g., "float", "int", "double")
+  uint32_t size_type_name;
+  if (!enif_get_list_length(env, type_name_term, &size_type_name))
+  {
+    return enif_make_badarg(env);
+  }
+
+  std::string type_name(size_type_name, '\0');
+  if (!enif_get_string(env, type_name_term, type_name.data(), size_type_name + 1, ERL_NIF_LATIN1))
+  {
+    return enif_make_badarg(env);
+  }
+
+  // Calculate the size in bytes for the SVM array based on the data type and number of elements
+  size_t array_size_bytes;
+
+  if (type_name == "float")
+  {
+    array_size_bytes = sizeof(float) * nx_length;
+  }
+  else if (type_name == "int")
+  {
+    array_size_bytes = sizeof(int) * nx_length;
+  }
+  else if (type_name == "double")
+  {
+    array_size_bytes = sizeof(double) * nx_length;
+  }
+  else // Unknown type
+  {
+    std::string message = "[ERROR] new_aligned_nx_from_list_nif: unknown type: " + type_name;
+    return enif_raise_exception(env, enif_make_string(env, message.c_str(), ERL_NIF_LATIN1));
+  }
+
+  if (debug_logs)
+  {
+    std::cout << "[C++ GPU NIF] Creating new empty aligned SVM array with " << nx_length << " elements of type <" << type_name << ">." << std::endl;
+    std::cout << "[C++ GPU NIF] Calculated array size in bytes: " << array_size_bytes << " bytes." << std::endl;
+  }
+
+  try
+  {
+    // Allocate Shared Virtual Memory (SVM) that is aligned and can be accessed by any CPU core.
+    // By default, all OCL-PolyHok's SVMs will be allocated in the CPU for CPU parallel computations.
+    // We do not intend to use SVM for GPU computations, because we are already using cl::Buffer for this.
+    void *aligned_mem = open_cl->createSVM(array_size_bytes, OCLInterface::DeviceType::CPU);
 
     // Allocate an Erlang resource to hold the pointer to the SVM memory.
     void **svm_res = (void **)enif_alloc_resource(CPU_SVM_TYPE, sizeof(void *));
@@ -1094,8 +1229,9 @@ static ErlNifFunc nif_funcs[] = {
     {"new_array_from_nx_nif", 5, new_array_from_nx_nif, 0},
     {"synchronize_nif", 1, synchronize_nif, 0},
     {"set_debug_logs_nif", 1, set_debug_logs_nif, 0},
-    {"double_supported_nif", 0, double_supported_nif, 0},
+    {"double_supported_nif", 1, double_supported_nif, 0},
     {"new_aligned_nx_from_list_nif", 3, new_aligned_nx_from_list_nif, 0},
+    {"new_empty_aligned_nx_nif", 2, new_empty_aligned_nx_nif, 0},
     {"is_nx_aligned_nif", 1, is_nx_aligned_nif, 0},
     {"map_nx_svm_nif", 3, map_nx_svm_nif, 0},
     {"unmap_nx_svm_nif", 1, unmap_nx_svm_nif, 0}};
