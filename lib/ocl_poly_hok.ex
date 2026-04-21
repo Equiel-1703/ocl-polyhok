@@ -245,7 +245,7 @@ defmodule OCLPolyHok do
     t_charlist = get_type_charlist(type)
     ref = new_empty_array_nif(l, c, t_charlist, device)
 
-    {:nx, type, shape, [nil], ref}
+    {:nx, type, shape, nil, ref}
   end
 
   # == New from nx tensor
@@ -295,7 +295,7 @@ defmodule OCLPolyHok do
     t_charlist = get_type_charlist(type)
     ref = get_device_array_nif(gnx_ref, l, c, t_charlist, ctx.device)
 
-    %Nx.Tensor{data: %Nx.BinaryBackend{state: ref}, type: type, shape: shape, names: name}
+    Nx.from_binary(ref, type) |> Nx.reshape(shape, names: name)
   end
 
   # ------- New NX Tensor functions (they allocate aligned memory) -------

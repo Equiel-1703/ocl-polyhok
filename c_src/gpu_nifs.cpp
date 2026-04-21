@@ -543,6 +543,7 @@ static ERL_NIF_TERM get_device_array_nif(ErlNifEnv *env, int /* argc */, const E
 
     if (debug_logs)
     {
+      std::cout << "[C++ GPU NIF] Retrieved device array with " << nrow << " rows and " << ncol << " columns." << std::endl;
       std::cout << "[C++ GPU NIF] Data copied from device to host successfully." << std::endl;
     }
   }
