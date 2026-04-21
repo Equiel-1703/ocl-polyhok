@@ -212,11 +212,12 @@ defmodule OCLPolyHok.TypeInference do
       body
     else
       case body do
+        {:do, {:__block__, pos, code}} ->
+          # IO.puts("aqui")
+          {:do, {:__block__, pos, check_return(code)}}
+
         {:__block__, pos, code} ->
           {:__block__, pos, check_return(code)}
-
-        {:do, {:__block__, pos, code}} ->
-          {:do, {:__block__, pos, check_return(code)}}
 
         {:do, exp} ->
           case exp do
@@ -241,27 +242,46 @@ defmodule OCLPolyHok.TypeInference do
     end
   end
 
-  defp check_return([com]) do
-    case com do
-      {:return, _, _} ->
-        [com]
+  # When we have a list of commands we need to check only the last one,
+  # because only the last command can be a return statement.
+  defp check_return(coms) when is_list(coms) do
+    # IO.puts("Multiple commands")
 
-      {:if, info, [exp, [do: block]]} ->
-        [{:if, info, [exp, [do: check_return(block)]]}]
+    list_len = length(coms)
+    coms_with_index = Enum.with_index(coms, 1)
 
-      {:if, info, [exp, [do: block, else: belse]]} ->
-        [{:if, info, [exp, [do: check_return(block), else: check_return(belse)]]}]
-
-      _ ->
-        if is_exp?(com) do
-          [{:return, [], [com]}]
-        else
-          [com]
-        end
-    end
+    Enum.map(coms_with_index, fn {com, idx} ->
+      if idx == list_len do
+        check_return_last(com)
+      else
+        check_return(com)
+      end
+    end)
   end
 
   defp check_return(com) do
+    # IO.puts("Single command - but not last")
+    # IO.inspect(com, label: "Command to check")
+
+    case com do
+      {:return, _, _} ->
+        com
+
+      {:if, info, [exp, [do: block]]} ->
+        {:if, info, [exp, [do: check_return(block)]]}
+
+      {:if, info, [exp, [do: block, else: belse]]} ->
+        {:if, info, [exp, [do: check_return(block), else: check_return(belse)]]}
+
+      _ ->
+        com
+    end
+  end
+
+  defp check_return_last(com) do
+    # IO.puts("Checking last command")
+    # IO.inspect(com, label: "Command to check")
+
     case com do
       {:return, _, _} ->
         com

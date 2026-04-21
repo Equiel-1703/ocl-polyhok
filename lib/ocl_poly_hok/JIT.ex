@@ -706,6 +706,8 @@ defmodule JIT do
         # Travels the function body and adds a return statement if the function returns an expression
         body = OCLPolyHok.TypeInference.add_return(Map.put(%{}, :return, :none), body)
 
+        # IO.inspect(body, label: "body with return added")
+
         # Get list of functions called inside the device function
         funs = find_functions({:defd, ii, [header, [body]]})
         # Register the function in the module server
@@ -818,6 +820,7 @@ defmodule JIT do
   # When it finds a function call, it adds it to the set of functions in the map only if
   # the function is not in the parameters list of the kernel or device function.
   defp find_function_calls_command(map, code) do
+    # IO.inspect(code, label: "find_function_calls_command")
     case code do
       {:for, _i, [_param, [body]]} ->
         find_function_calls_body(map, body)
