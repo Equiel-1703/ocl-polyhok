@@ -1,12 +1,10 @@
 require OCLPolyHok
 
-# OCLPolyHok.set_debug_logs(true)
+OCLPolyHok.set_debug_logs(true)
 
 Nx.default_backend(Nx.BinaryBackend)
 
 OCLPolyHok.defmodule DP do
-  include(CAS_Poly)
-
   defk map_2kernel(a1, a2, a3, size, f) do
     id = get_global_id(0)
 
@@ -15,40 +13,29 @@ OCLPolyHok.defmodule DP do
     end
   end
 
-  defk reduce_kernel(arr, result, initial, f, n) do
-    __shared__(cache[64])
-
+  # This reduce kernel was rewritten to better perform in CPU
+  defk reduce_kernel(arr, result_arr, initial_value, f, arr_size) do
     tid = get_global_id(0)
-    cacheIndex = get_local_id(0)
+    num_cores = get_global_size(0)
 
-    temp = initial
+    range = (arr_size + num_cores - 1) / num_cores;
+    start = tid * range
+    stop = start + range
 
-    if tid < n do
-      temp = f(arr[tid], temp)
+    if stop > arr_size do
+      stop = arr_size
     end
 
-    cache[cacheIndex] = temp
-    __syncthreads()
+    local_sum = initial_value
 
-    i = get_local_size(0) / 2
-
-    while i != 0 do
-      if cacheIndex < i do
-        cache[cacheIndex] = f(cache[cacheIndex + i], cache[cacheIndex])
-      end
-
-      __syncthreads()
-      i = i / 2
+    for i in range(start, stop) do
+      local_sum = f(local_sum, arr[i])
     end
 
-    if cacheIndex == 0 do
-      current_value = result[0]
-      new_value = f(cache[0], current_value)
-
-      while(current_value != cas_float(result, current_value, new_value)) do
-        current_value = result[0]
-        new_value = f(cache[0], current_value)
-      end
+    if start < arr_size do
+      result_arr[tid] = local_sum
+    else
+      result_arr[tid] = initial_value
     end
   end
 
@@ -77,25 +64,24 @@ OCLPolyHok.defmodule DP do
   end
 
   def reduce(tensor, initial, f) do
+    cores = 12
+
     shape = OCLPolyHok.get_shape(tensor)
     type = OCLPolyHok.get_type(tensor)
     len = Nx.size(shape)
 
-    result_tensor = OCLPolyHok.tensor([initial], type)
-
-    # threadsPerBlock = 8
-    # numberOfBlocks = div(len + threadsPerBlock - 1, threadsPerBlock)
+    result_tensor = OCLPolyHok.tensor({cores}, type, fn _i -> initial end)
 
     OCLPolyHok.with OCLPolyHok.cpu() do
       OCLPolyHok.spawn(
         &DP.reduce_kernel/5,
-        {len},
-        {0},
+        {cores},
+        {1},
         [tensor, result_tensor, initial, f, len]
       )
     end
 
-    result_tensor
+    Nx.sum(result_tensor)
   end
 end
 
@@ -110,15 +96,18 @@ vet2 = OCLPolyHok.tensor({n}, :f32, fn _i -> 2.0 end)
 
 prev = System.monotonic_time()
 
-res = DP.map2(vet1, vet2, OCLPolyHok.phok(fn a, b -> a * b end)) |> DP.reduce(0.0, OCLPolyHok.phok(fn a, b -> a + b end))
+res =
+  DP.map2(vet1, vet2, OCLPolyHok.phok(fn a, b -> a * b end))
+  |> DP.reduce(0.0, OCLPolyHok.phok(fn a, b -> a + b end))
 
 next = System.monotonic_time()
 
-res_value = res[0] |> Nx.to_number()
+res_value = res |> Nx.to_number()
 expected_value = n * 2
 
 IO.inspect(vet1, label: "Input tensor 1")
 IO.inspect(vet2, label: "Input tensor 2")
+IO.inspect(res, label: "result tensor")
 IO.inspect(res_value, label: "Dot product result")
 IO.puts("Expected result: #{expected_value}")
 
