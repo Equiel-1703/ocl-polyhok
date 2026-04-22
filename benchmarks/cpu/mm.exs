@@ -25,8 +25,8 @@ OCLPolyHok.defmodule MM do
   end
 
   def mm(arr1, arr2, size) do
-    # block_size = 4
-    # num_blocks = div(size + block_size - 1, block_size)
+    block_size = 4
+    num_blocks = div(size + block_size - 1, block_size)
 
     type = OCLPolyHok.get_type(arr1)
 
@@ -36,9 +36,10 @@ OCLPolyHok.defmodule MM do
     OCLPolyHok.with OCLPolyHok.cpu() do
       OCLPolyHok.spawn(
         &MM.map2xy2D_kernel/6,
+        # In this case, the grid size needs to cover the entire output matrix
+        {num_blocks, num_blocks},
         # We are letting OpenCL determine the optimal work group size
-        {0, 0, 1},
-        {0, 0, 1},
+        {block_size, block_size},
         [arr1, arr2, size, result_nx, size, &MM.mult/5]
       )
     end
