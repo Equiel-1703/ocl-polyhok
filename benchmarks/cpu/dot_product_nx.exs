@@ -1,6 +1,10 @@
+Nx.default_backend({EXLA.Backend, client: :host})
+
 [arg] = System.argv()
 
 n = String.to_integer(arg)
+
+IO.puts("Using Nx backend: #{inspect(Nx.default_backend())}\n")
 
 vet1 = OCLPolyHok.tensor({n}, :f32, fn _i -> 1.0 end)
 vet2 = OCLPolyHok.tensor({n}, :f32, fn _i -> 2.0 end)

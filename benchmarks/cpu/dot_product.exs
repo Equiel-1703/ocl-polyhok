@@ -2,6 +2,8 @@ require OCLPolyHok
 
 # OCLPolyHok.set_debug_logs(true)
 
+Nx.default_backend(Nx.BinaryBackend)
+
 OCLPolyHok.defmodule DP do
   include(CAS_Poly)
 
@@ -14,7 +16,7 @@ OCLPolyHok.defmodule DP do
   end
 
   defk reduce_kernel(arr, result, initial, f, n) do
-    __shared__(cache[8])
+    __shared__(cache[64])
 
     tid = get_global_id(0)
     cacheIndex = get_local_id(0)
@@ -59,14 +61,14 @@ OCLPolyHok.defmodule DP do
     result_tensor = OCLPolyHok.tensor(shape, type)
 
     # Small sizes are a good fit for CPU execution
-    threadsPerBlock = 8
-    numberOfBlocks = div(len + threadsPerBlock - 1, threadsPerBlock)
+    # threadsPerBlock = 8
+    # numberOfBlocks = div(len + threadsPerBlock - 1, threadsPerBlock)
 
     OCLPolyHok.with OCLPolyHok.cpu() do
       OCLPolyHok.spawn(
         &DP.map_2kernel/5,
-        {numberOfBlocks, 1, 1},
-        {threadsPerBlock, 1, 1},
+        {len},
+        {0},
         [t1, t2, result_tensor, len, func]
       )
     end
@@ -81,14 +83,14 @@ OCLPolyHok.defmodule DP do
 
     result_tensor = OCLPolyHok.tensor([initial], type)
 
-    threadsPerBlock = 8
-    numberOfBlocks = div(len + threadsPerBlock - 1, threadsPerBlock)
+    # threadsPerBlock = 8
+    # numberOfBlocks = div(len + threadsPerBlock - 1, threadsPerBlock)
 
     OCLPolyHok.with OCLPolyHok.cpu() do
       OCLPolyHok.spawn(
         &DP.reduce_kernel/5,
-        {numberOfBlocks, 1, 1},
-        {threadsPerBlock, 1, 1},
+        {len},
+        {0},
         [tensor, result_tensor, initial, f, len]
       )
     end
@@ -100,6 +102,8 @@ end
 [arg] = System.argv()
 
 n = String.to_integer(arg)
+
+IO.puts("Using Nx backend: #{inspect(Nx.default_backend())}\n")
 
 vet1 = OCLPolyHok.tensor({n}, :f32, fn _i -> 1.0 end)
 vet2 = OCLPolyHok.tensor({n}, :f32, fn _i -> 2.0 end)
