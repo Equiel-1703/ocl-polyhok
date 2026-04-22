@@ -701,6 +701,54 @@ defmodule OCLPolyHok do
     end)
   end
 
+  # Validates the tuple size and check for zeros in the tuples. Returns the processed tuples with fixed 3 dimensions.
+  # If the user wants OpenCL to decide the number of threads automatically, they can set the block size tuple to {0}.
+  # In this case, we return {0, 0, 0} as the processed threads tuple.
+  defp process_tuples(grid_tuple, threads_tuple) do
+    threads_tuple_len = tuple_size(threads_tuple)
+    grid_tuple_len = tuple_size(grid_tuple)
+
+    cond do
+      threads_tuple_len < 1 or threads_tuple_len > 3 ->
+        raise "Invalid block size tuple: #{inspect(threads_tuple)}. The block size must be a tuple of 1, 2 or 3 dimensions."
+
+      grid_tuple_len < 1 or grid_tuple_len > 3 ->
+        raise "Invalid grid size tuple: #{inspect(grid_tuple)}. The grid size must be a tuple of 1, 2 or 3 dimensions."
+
+      true ->
+        :ok
+    end
+
+    # Check if thread tuple with 2 or 3 elements contains zero; Check if grid tuple contains zero
+    cond do
+      threads_tuple_len > 1 and Enum.any?(Tuple.to_list(threads_tuple), fn x -> x == 0 end) ->
+        raise "If you wish that OpenCL decides the number of threads automatically please set the block size tuple to {0}. Otherwise, zero is not allowed for a block dimension."
+
+      Enum.any?(Tuple.to_list(grid_tuple), fn x -> x == 0 end) ->
+        raise "The grid size tuple cannot contain zero."
+
+      true ->
+        :ok
+    end
+
+    processed_threads_tuple =
+      case threads_tuple do
+        {x, y, z} -> {x, y, z}
+        {x, y} -> {x, y, 1}
+        {0} -> {0, 0, 0}
+        {x} -> {x, 1, 1}
+      end
+
+    processed_grid_tuple =
+      case grid_tuple do
+        {x, y, z} -> {x, y, z}
+        {x, y} -> {x, y, 1}
+        {x} -> {x, 1, 1}
+      end
+
+    {processed_grid_tuple, processed_threads_tuple}
+  end
+
   # ----------------------- Spawn function -----------------------
   @doc """
   Spwans a kernel with JIT compilation.
@@ -711,11 +759,11 @@ defmodule OCLPolyHok do
 
     - `ctx`: The OCLPolyHok context containing the device information.
     - `k`: The kernel function to be compiled and executed.
-    - `t`: The work group size in each dimension (a.k.a number of blocks).
-    - `b`: A list containing the number of work items in each dimension (a.k.a threads per block).
+    - `b`: A tuple containing the number of blocks on each dimension (x, y, z), a.k.a grid size.
+    - `t`: A tuple containing the blocks size on each dimension (x, y, z), a.k.a thread group size.
     - `l`: A list of arguments to be passed to the kernel.
   """
-  def spawn(%OCLPolyHok.Context{} = ctx, k, t, b, l) do
+  def spawn(%OCLPolyHok.Context{} = ctx, k, b, t, l) do
     # Process the kernel arguments based on the device context.
     l =
       cond do
@@ -725,6 +773,8 @@ defmodule OCLPolyHok do
         ctx.device == :gpu ->
           process_gpu_kernel_args(l, ctx)
       end
+
+    {b, t} = process_tuples(b, t)
 
     # Get kernel name from the kernel function reference.
     kernel_name = JIT.get_kernel_name(k)
@@ -844,8 +894,8 @@ defmodule OCLPolyHok do
     jit_compile_and_launch_nif(
       Kernel.to_charlist(kernel_name),
       Kernel.to_charlist(prog),
-      t,
       b,
+      t,
       length(args),
       types_args,
       args,
@@ -933,7 +983,7 @@ defmodule OCLPolyHok do
     raise "NIF syncronize_nif/1 not implemented"
   end
 
-  def jit_compile_and_launch_nif(_n, _k, _t, _b, _size, _types, _l, _d) do
+  def jit_compile_and_launch_nif(_n, _k, _grid, _threads, _size, _types, _l, _d) do
     raise "NIF jit_compile_and_launch_nif/8 not implemented"
   end
 end

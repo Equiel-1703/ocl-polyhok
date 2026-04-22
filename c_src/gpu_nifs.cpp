@@ -272,7 +272,7 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
 
   if (arity != 3)
   {
-    std::cerr << "[ERROR] The blocks and threads tuples must have exactly 3 elements (for x, y, z dimensions)." << std::endl;
+    std::cerr << "[ERROR] The blocks tuples must have exactly 3 elements (for x, y, z dimensions)." << std::endl;
     return enif_make_badarg(env);
   }
 
@@ -284,33 +284,54 @@ static ERL_NIF_TERM jit_compile_and_launch_nif(ErlNifEnv *env, int argc, const E
 
   if (arity != 3)
   {
-    std::cerr << "[ERROR] The blocks and threads tuples must have exactly 3 elements (for x, y, z dimensions)." << std::endl;
+    std::cerr << "[ERROR] The threads tuples must have exactly 3 elements (for x, y, z dimensions)." << std::endl;
     return enif_make_badarg(env);
   }
 
   // Extracting the number of blocks and threads from the tuples
-  int blocks_x, blocks_y, blocks_z, threads_x, threads_y, threads_z;
+  int blocks[3], threads[3];
 
-  enif_get_int(env, tuple_blocks[0], &blocks_x);
-  enif_get_int(env, tuple_blocks[1], &blocks_y);
-  enif_get_int(env, tuple_blocks[2], &blocks_z);
-  enif_get_int(env, tuple_threads[0], &threads_x);
-  enif_get_int(env, tuple_threads[1], &threads_y);
-  enif_get_int(env, tuple_threads[2], &threads_z);
+  for (int i = 0; i < 3; i++)
+  {
+    enif_get_int(env, tuple_blocks[i], blocks + i);
+    enif_get_int(env, tuple_threads[i], threads + i);
+  }
 
-  // Creating NDRange objects for blocks and threads
-  // The global range is the total number of threads (work-items) in each dimension
-  // The local range is the size of each block (work-group) in every dimension
-  // So we need to calculate the global range in each dimension
-  cl::NDRange global_range(blocks_x * threads_x, blocks_y * threads_y, blocks_z * threads_z);
-  cl::NDRange local_range(threads_x, threads_y, threads_z);
+  // Creating NDRange objects for local and global range
+  cl::NDRange global_range, local_range;
+
+  // If the user wants OpenCL to calculate the number of threads automatically, Elixir will set the threads tuple to {0, 0, 0}.
+  // This is the only case where the threads tuple can contain zero, so we can check only if the first element is zero.
+  bool let_opencl_decide_local_range = (threads[0] == 0);
+
+  if (let_opencl_decide_local_range)
+  {
+    // Let OpenCL decide the local range (work-group size)
+    local_range = cl::NullRange;
+    // In this case, the grid size will have to contain the global range
+    global_range = cl::NDRange(blocks[0], blocks[1], blocks[2]);
+  }
+  else
+  {
+    local_range = cl::NDRange(threads[0], threads[1], threads[2]);
+    global_range = cl::NDRange(blocks[0] * threads[0], blocks[1] * threads[1], blocks[2] * threads[2]);
+  }
 
   if (debug_logs)
   {
-    std::cout << "[C++ GPU NIF] Kernel '" << kernel_name << "' will be executed with a global range of "
-              << global_range[0] << "x" << global_range[1] << "x" << global_range[2]
-              << " and a local range of " << local_range[0] << "x" << local_range[1]
-              << "x" << local_range[2] << "." << std::endl;
+    if (let_opencl_decide_local_range)
+    {
+      std::cout << "[C++ GPU NIF] Kernel '" << kernel_name << "' will be executed with a global range of "
+                << global_range[0] << "x" << global_range[1] << "x" << global_range[2]
+                << " and an automatically determined local range." << std::endl;
+    }
+    else
+    {
+      std::cout << "[C++ GPU NIF] Kernel '" << kernel_name << "' will be executed with a global range of "
+                << global_range[0] << "x" << global_range[1] << "x" << global_range[2]
+                << " and a local range of " << local_range[0] << "x" << local_range[1]
+                << "x" << local_range[2] << "." << std::endl;
+    }
   }
 
   // Getting the number of arguments given to the kernel
