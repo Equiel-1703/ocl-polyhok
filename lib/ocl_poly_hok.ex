@@ -566,30 +566,30 @@ defmodule OCLPolyHok do
 
   # ----------------- NIF function definitions -----------------
   def set_debug_logs_nif(_enable) do
-    raise "NIF set_debug_logs_nif/1 not implemented"
+    :erlang.nif_error(:nif_not_loaded)
   end
 
   def double_supported_nif() do
-    raise "NIF double_supported_nif/0 not implemented"
+    :erlang.nif_error(:nif_not_loaded)
   end
 
   def new_gpu_array_nif(_l, _c, _type) do
-    raise "NIF new_gpu_array_nif/4 not implemented"
+    :erlang.nif_error(:nif_not_loaded)
   end
 
   def get_gpu_array_nif(_matrex, _l, _c, _type) do
-    raise "NIF get_gpu_array_nif/4 not implemented"
+    :erlang.nif_error(:nif_not_loaded)
   end
 
   def create_gpu_array_nx_nif(_matrex, _l, _c, _type) do
-    raise "NIF create_gpu_array_nx_nif/4 not implemented"
+    :erlang.nif_error(:nif_not_loaded)
   end
 
   def synchronize_nif() do
-    raise "NIF syncronize_nif/0 not implemented"
+    :erlang.nif_error(:nif_not_loaded)
   end
 
   def jit_compile_and_launch_nif(_n, _k, _t, _b, _size, _types, _l) do
-    raise "NIF jit_compile_and_launch_nif/7 not implemented"
+    :erlang.nif_error(:nif_not_loaded)
   end
 end
