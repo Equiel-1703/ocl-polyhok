@@ -84,31 +84,6 @@ void OCLInterface::selectPlatform(cl::Platform p)
     }
 }
 
-void OCLInterface::selectDefaultPlatform()
-{
-    std::vector<cl::Platform> platforms = this->getAvailablePlatforms();
-
-    if (platforms.empty())
-    {
-        throw std::runtime_error("No OpenCL platforms found");
-    }
-
-    this->selectPlatform(platforms[0]);
-}
-
-std::vector<cl::Device> OCLInterface::getAvailableDevices(cl_device_type device_type)
-{
-    if (this->selected_platform() == nullptr)
-    {
-        throw std::runtime_error("No OpenCL platform selected");
-    }
-
-    std::vector<cl::Device> devices;
-    this->selected_platform.getDevices(device_type, &devices);
-
-    return devices;
-}
-
 void OCLInterface::selectDevice(cl::Device d)
 {
     if (d() == nullptr)
@@ -127,16 +102,27 @@ void OCLInterface::selectDevice(cl::Device d)
     }
 }
 
-void OCLInterface::selectDefaultDevice(cl_device_type device_type)
+void OCLInterface::selectDefaultPlatformAndDevice(cl_device_type device_type)
 {
-    std::vector<cl::Device> devices = this->getAvailableDevices(device_type);
+    std::vector<cl::Platform> available_platforms = this->getAvailablePlatforms();
+    std::vector<cl::Device> available_devices;
 
-    if (devices.empty())
+    for (cl::Platform &p : available_platforms)
     {
-        throw std::runtime_error("No OpenCL devices found");
-    }
+        p.getDevices(device_type, &available_devices);
 
-    this->selectDevice(devices[0]);
+        if (available_devices.empty())
+        {
+            continue;
+        }
+        else
+        {
+            selectPlatform(p);
+            selectDevice(available_devices[0]);
+
+            break;
+        }
+    }
 }
 
 std::vector<std::pair<std::string, bool>> OCLInterface::checkDeviceExtensions(std::vector<std::string> &extensions)
