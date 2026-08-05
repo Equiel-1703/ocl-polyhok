@@ -107,7 +107,7 @@ void OCLInterface::selectDefaultPlatformAndDevice(cl_device_type device_type)
     std::vector<cl::Platform> available_platforms = this->getAvailablePlatforms();
     std::vector<cl::Device> available_devices;
 
-    for (cl::Platform &p : available_platforms)
+    for (const cl::Platform &p : available_platforms)
     {
         p.getDevices(device_type, &available_devices);
 
