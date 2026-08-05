@@ -31,3 +31,7 @@ mix.lock
 
 # Ignore specific scripts
 ocl-polyhok-polyhok-script.sh
+
+# Ignore CMake build files
+build/
+CMake/

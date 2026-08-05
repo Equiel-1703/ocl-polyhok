@@ -427,8 +427,33 @@ defmodule OCLPolyHok do
     # of the actual parameters provided to the kernel (contained in the list `l`).
     delta = JIT.gen_types_delta(kast, l)
 
-    # Infers the types of the kernel's variables and functions based on the AST and the delta map inferred above.
-    inf_types = JIT.infer_types(kast, delta)
+    # FIRST, we need to infer the signature types of all functions used in the kernel (return type and args types)
+    # This is needed to correctly infer the types of the kernel's internal variables and parameters, since they may depend on the return
+    # types of the functions used within the kernel.
+
+    # To start, let's get the ASTs of all functions used in the kernel (contained in the `fun_graph`). The 'fun_graph' doesn't include
+    # the functions passed as arguments to the kernel, but only those used within the kernel that are not parameters.
+    # This is good, because parameters functions may not exist yet at compile time (e.g. anonymous functions), an their types are
+    # highly dependent on the context of the kernel execution, so they are better inferred later during the kernel inference.
+    funs_graph_asts =
+      JIT.get_non_parameters_func_asts(fun_graph)
+      # Now we need to sort these functions in the correct order of inference
+      |> JIT.sort_functions_by_call_graph()
+
+    # We now infer the types of each function and get a new delta map that contains the function type signatures of each device function
+    new_delta = JIT.infer_device_functions_types(funs_graph_asts)
+
+    # Now we merge this new_dalta containing the type signatures of the device functions with the previous delta containing the types
+    # of the kernel parameters, so when we infer the types of the kernel, it can use both the types of the kernel parameters and the types
+    # of the device functions used within the kernel.
+    delta = Map.merge(delta, new_delta)
+
+    # Infers the types of the kernel's variables and functions based on the AST and the new delta map
+    inf_types =
+      case JIT.infer_types(kast, delta, kernel_name) do
+        {:ok, types} -> types
+        {:error, _types, reason} -> raise "Type inference failed: #{reason}"
+      end
 
     # Check if the inferred types contain 'double' or 'tdouble' types
     contains_double =
@@ -445,25 +470,37 @@ defmodule OCLPolyHok do
     subs = JIT.get_function_parameters(kast, l)
 
     # Compiles the kernel AST into a string representation of the OpenCL code. The inferred types are used
-    # to generate the correct OpenCL types for the kernel parameters. The `subs` map is used to replace
-    # function parameters with their actual names in the generated code.
+    # to generate the correct OpenCL types for all the kernel internal variables and parameters.
+    # The `subs` map is used to replace function parameters with their actual device function names in the generated code.
     kernel = JIT.compile_kernel(kast, inf_types, subs)
 
-    # Here we are getting a list of tuples {function_name, type} for all formal parameters that are functions.
-    # This is needed so we can compile correctly the functions that are passed as arguments to the kernel.
+    # Here we are getting a list of tuples {actual_function_param, type} for all formal parameters that are functions.
+    # This is needed because we will compile these functions and their type signatures will be used as their initial delta type map.
     funs = JIT.get_function_parameters_and_their_types(kast, l, inf_types)
 
-    # Takes the function graph and the inferred types, and returns a list of tuples where each tuple contains
-    # a function name and its inferred type. This is used to compile the functions that are not directly
+    # Takes the function graph and the kernel final inferred types and creates a list of tuples where each tuple contains
+    # a function name and its inferred type signature. This is used to compile the functions that are not directly
     # passed as arguments to the kernel, but are used within the kernel.
+    # The kernel final inferred types contains the inferred types of these functions because during the kernel type inference
+    # their type is updated. So if the type was incomplete before (e.g. just the return type was inferred), by the end of the kernel
+    # inference their type should be complete (return type and args types) =D
     other_funs =
-      fun_graph
-      |> Enum.map(fn x -> {x, inf_types[x]} end)
+      funs_graph_asts # I'm using the fun_graph_asts because its ordered according to dependencies
+      |> Enum.map(fn {x, _ast} -> {x, inf_types[x]} end)
+      # Remove functions that could not be inferred
       |> Enum.filter(fn {_, i} -> i != nil end)
 
-    # Compiles all functions (both those passed as arguments and those used within the kernel).
-    comp = Enum.map(funs ++ other_funs, &JIT.compile_function/1)
-    comp = Enum.reduce(comp, [], fn x, y -> y ++ x end)
+    # Compiles all functions (both those passed as arguments and those used within the kernel) with the latest inferred types
+    all_funs = other_funs ++ funs
+
+    # The JIT.compile_function/2 function compiles the provided function AND it's dependencies (other functions called within
+    # a function). To avoid recompiling functions that were already compiled, we provide a MapSet of already compiled functions,
+    # so the JIT.compile_function/2 can check and skip a function if necessary.
+    {comp, _compiled_funs} =
+      Enum.reduce(all_funs, {[], MapSet.new()}, fn fun, {code_acc, compiled_funs_acc} ->
+        {new_code, compiled_funs_acc} = JIT.compile_function(fun, compiled_funs_acc)
+        {code_acc ++ new_code, compiled_funs_acc}
+      end)
 
     # The `JIT.get_includes/0` function returns a list of OpenCL code that
     # will be prepended to the generated kernel code.
@@ -529,30 +566,30 @@ defmodule OCLPolyHok do
 
   # ----------------- NIF function definitions -----------------
   def set_debug_logs_nif(_enable) do
-    raise "NIF set_debug_logs_nif/1 not implemented"
+    :erlang.nif_error(:nif_not_loaded)
   end
 
   def double_supported_nif() do
-    raise "NIF double_supported_nif/0 not implemented"
+    :erlang.nif_error(:nif_not_loaded)
   end
 
   def new_gpu_array_nif(_l, _c, _type) do
-    raise "NIF new_gpu_array_nif/4 not implemented"
+    :erlang.nif_error(:nif_not_loaded)
   end
 
   def get_gpu_array_nif(_matrex, _l, _c, _type) do
-    raise "NIF get_gpu_array_nif/4 not implemented"
+    :erlang.nif_error(:nif_not_loaded)
   end
 
   def create_gpu_array_nx_nif(_matrex, _l, _c, _type) do
-    raise "NIF create_gpu_array_nx_nif/4 not implemented"
+    :erlang.nif_error(:nif_not_loaded)
   end
 
   def synchronize_nif() do
-    raise "NIF syncronize_nif/0 not implemented"
+    :erlang.nif_error(:nif_not_loaded)
   end
 
   def jit_compile_and_launch_nif(_n, _k, _t, _b, _size, _types, _l) do
-    raise "NIF jit_compile_and_launch_nif/7 not implemented"
+    :erlang.nif_error(:nif_not_loaded)
   end
 end

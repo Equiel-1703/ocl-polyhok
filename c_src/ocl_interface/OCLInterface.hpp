@@ -35,6 +35,26 @@ private:
     void createCommandQueue();
 
     /**
+     * @brief Returns a vector of available OpenCL platforms on the system.
+     * 
+     * @return A vector containing the available OpenCL platforms.
+     */
+    std::vector<cl::Platform> getAvailablePlatforms();
+    /**
+     * @brief Selects the given OpenCL platform as the active platform.
+     * 
+     * @param p The OpenCL platform to select.
+     */
+    void selectPlatform(cl::Platform p);
+
+    /**
+     * @brief Selects the given OpenCL device as the active device.
+     * 
+     * @param d The OpenCL device to select.
+     */
+    void selectDevice(cl::Device d);
+
+    /**
      * @brief Reads the kernel code from a file.
      * 
      * @param file_name The name of the file containing the kernel code.
@@ -84,43 +104,12 @@ public:
     void setDebugLogs(bool enable);
 
     /**
-     * @brief Returns a vector of available OpenCL platforms on the system.
-     * 
-     * @return A vector containing the available OpenCL platforms.
-     */
-    std::vector<cl::Platform> getAvailablePlatforms();
-    /**
-     * @brief Selects the given OpenCL platform as the active platform.
-     * 
-     * @param p The OpenCL platform to select.
-     */
-    void selectPlatform(cl::Platform p);
-    /**
-     * @brief Selects the first available OpenCL platform as the active platform.
-     */
-    void selectDefaultPlatform();
-
-    /**
-     * @brief Returns a vector of available OpenCL devices of the specified type on the selected platform.
-     * If no device type is specified, all device types are considered. If no platform is selected, an exception is thrown.
-     * 
-     * @param device_type The type of OpenCL devices to query (default is CL_DEVICE_TYPE_ALL).
-     * @return A vector containing the available OpenCL devices of the specified type.
-     */
-    std::vector<cl::Device> getAvailableDevices(cl_device_type device_type = CL_DEVICE_TYPE_ALL);
-    /**
-     * @brief Selects the given OpenCL device as the active device.
-     * 
-     * @param d The OpenCL device to select.
-     */
-    void selectDevice(cl::Device d);
-    /**
-     * @brief Selects the first available OpenCL device of the specified type as the active device.
-     * If no device type is specified, all device types are considered.
+     * @brief Selects the first available OpenCL platform that contains a device of the specified type, 
+     * and selects that device as the active device. If no device type is specified, all device types are considered.
      * 
      * @param device_type The type of OpenCL device to select (default is CL_DEVICE_TYPE_ALL).
      */
-    void selectDefaultDevice(cl_device_type device_type = CL_DEVICE_TYPE_ALL);
+    void selectDefaultPlatformAndDevice(cl_device_type device_type = CL_DEVICE_TYPE_ALL);
 
     /**
      * @brief Checks if the selected device supports the specified OpenCL extensions.

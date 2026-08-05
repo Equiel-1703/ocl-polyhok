@@ -55,11 +55,8 @@ void init_ocl(ErlNifEnv *env)
 
   try
   {
-    // Selecting default platform
-    open_cl->selectDefaultPlatform();
-
-    // Selecting default GPU device (i.e. the first available of its type)
-    open_cl->selectDefaultDevice(CL_DEVICE_TYPE_GPU);
+    // Selecting default platform and device
+    open_cl->selectDefaultPlatformAndDevice(CL_DEVICE_TYPE_GPU);
 
     // Check for extension support
     std::vector<std::string> desired_extensions = {"cl_khr_fp64", "cl_khr_int64_base_atomics"};
