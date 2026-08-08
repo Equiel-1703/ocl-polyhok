@@ -23,7 +23,7 @@ defmodule OCLPolyHok do
   # generates a unique name for the function, and returns a tuple containing the function type (:anon),
   # name, and the function itself.
   defmacro phok({:fn, aa, [{:->, bb, [para, body]}]}) do
-    body = OCLPolyHok.OpenCLBackend.add_return(body)
+    body = OCLPolyHok.TypeInference.add_return(body)
     name = "anon_" <> OCLPolyHok.OpenCLBackend.gen_lambda_name()
     function = {:fn, aa, [{:->, bb, [para, body]}]}
     resp = quote(do: {:anon, unquote(name), unquote(Macro.escape(function))})
@@ -147,6 +147,10 @@ defmodule OCLPolyHok do
   end
 
   def get_shape({:nx, _type, shape, _name, _ref}) do
+    shape
+  end
+
+  def get_shape(%Nx.Tensor{shape: shape}) do
     shape
   end
 
@@ -496,6 +500,7 @@ defmodule OCLPolyHok do
     # The JIT.compile_function/2 function compiles the provided function AND it's dependencies (other functions called within
     # a function). To avoid recompiling functions that were already compiled, we provide a MapSet of already compiled functions,
     # so the JIT.compile_function/2 can check and skip a function if necessary.
+    # We also re-infer the device functions here now that we have the kernel delta to guarantee we have the correct types
     {comp, _compiled_funs} =
       Enum.reduce(all_funs, {[], MapSet.new()}, fn fun, {code_acc, compiled_funs_acc} ->
         {new_code, compiled_funs_acc} = JIT.compile_function(fun, compiled_funs_acc)
