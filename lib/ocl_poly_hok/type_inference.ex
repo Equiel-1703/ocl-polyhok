@@ -79,6 +79,7 @@ defmodule OCLPolyHok.TypeInference do
       IO.puts("\n========= [TypeInference] Starting type inference iteration =========")
       IO.puts("[TypeInference] Target function/kernel: #{inspect(f_name)}")
       IO.inspect(map, label: "[TypeInference] Current types map before iteration")
+      # IO.inspect(body, label: "AST Body", printable_limit: :infinity, limit: :infinity)
     end
 
     # Check if the type server already contains a map for this function. If it does, then it means this function was processed before,
@@ -120,8 +121,6 @@ defmodule OCLPolyHok.TypeInference do
             # If the maps are not the same, we merge them
             merge_types_map(map, types)
           end
-
-          types
       end
 
     types = infer_types(map, body)
@@ -205,63 +204,78 @@ defmodule OCLPolyHok.TypeInference do
   end
 
   @doc """
-    Adds a return statement to functions that return an expression.
+    Adds a return statement to the body of the provided function ONLY IF it returns a value.
   """
-  def add_return(map, body) do
-    if map[:return] == nil do
-      body
-    else
-      case body do
-        {:__block__, pos, code} ->
-          {:__block__, pos, check_return(code)}
+  def add_return(body) do
+    case body do
+      {:do, {:__block__, pos, code}} ->
+        {:do, {:__block__, pos, check_return(code)}}
 
-        {:do, {:__block__, pos, code}} ->
-          {:do, {:__block__, pos, check_return(code)}}
+      {:__block__, pos, code} ->
+        {:__block__, pos, check_return(code)}
 
-        {:do, exp} ->
-          case exp do
-            {:return, _, _} ->
-              {:do, exp}
+      {:do, exp} ->
+        case exp do
+          {:return, _, _} ->
+            {:do, exp}
 
-            _ ->
-              if is_exp?(exp) do
-                {:do, {:return, [], [exp]}}
-              else
-                {:do, check_return(exp)}
-              end
-          end
+          _ ->
+            if is_exp?(exp) do
+              {:do, {:return, [], [exp]}}
+            else
+              {:do, check_return(exp)}
+            end
+        end
 
-        {_, _, _} ->
-          if is_exp?(body) do
-            {:return, [], [body]}
-          else
-            body
-          end
-      end
-    end
-  end
-
-  defp check_return([com]) do
-    case com do
-      {:return, _, _} ->
-        [com]
-
-      {:if, info, [exp, [do: block]]} ->
-        [{:if, info, [exp, [do: check_return(block)]]}]
-
-      {:if, info, [exp, [do: block, else: belse]]} ->
-        [{:if, info, [exp, [do: check_return(block), else: check_return(belse)]]}]
-
-      _ ->
-        if is_exp?(com) do
-          [{:return, [], [com]}]
+      {_, _, _} ->
+        if is_exp?(body) do
+          {:return, [], [body]}
         else
-          [com]
+          body
         end
     end
   end
 
+  # When we have a list of commands we need to check only the last one,
+  # because only the last command can be a return statement.
+  defp check_return(coms) when is_list(coms) do
+    # IO.puts("Multiple commands")
+
+    list_len = length(coms)
+    coms_with_index = Enum.with_index(coms, 1)
+
+    Enum.map(coms_with_index, fn {com, idx} ->
+      if idx == list_len do
+        check_return_last(com)
+      else
+        check_return(com)
+      end
+    end)
+  end
+
   defp check_return(com) do
+    # IO.puts("Single command - but not last")
+    # IO.inspect(com, label: "Command to check")
+
+    case com do
+      {:return, _, _} ->
+        com
+
+      {:if, info, [exp, [do: block]]} ->
+        {:if, info, [exp, [do: check_return(block)]]}
+
+      {:if, info, [exp, [do: block, else: belse]]} ->
+        {:if, info, [exp, [do: check_return(block), else: check_return(belse)]]}
+
+      _ ->
+        com
+    end
+  end
+
+  defp check_return_last(com) do
+    # IO.puts("Checking last command")
+    # IO.inspect(com, label: "Command to check")
+
     case com do
       {:return, _, _} ->
         com
@@ -287,6 +301,7 @@ defmodule OCLPolyHok.TypeInference do
       {{:., _, [{_struct, _, nil}, _field]}, _, []} -> true
       {{:., _, [{:__aliases__, _, [_struct]}, _field]}, _, []} -> true
       {op, _info, _args} when op in [:+, :-, :/, :*] -> true
+      {op, _info, [_arg1]} when op in [:>>>, :<<<, :~>>, :&&&, :|||, :+++] -> true
       {op, _info, [_arg1, _arg2]} when op in [:<=, :<, :>, :>=, :!=, :==] -> true
       {:!, _info, [_arg]} -> true
       {op, _inf, _args} when op in [:&&, :||] -> true
@@ -534,21 +549,18 @@ defmodule OCLPolyHok.TypeInference do
 
       {:return, _, [arg]} ->
         case map[:return] do
-          :none ->
+          t when t in [:none, nil] ->
             inf_type = find_type_exp(map, arg)
 
             case inf_type do
               :none ->
-                map
+                Map.put(map, :return, :none)
 
               found_type ->
                 map = set_type_exp(map, found_type, arg)
                 map = Map.put(map, :return, found_type)
                 map
             end
-
-          nil ->
-            raise "Function must have a return."
 
           found_type ->
             set_type_exp(map, found_type, arg)
@@ -583,10 +595,7 @@ defmodule OCLPolyHok.TypeInference do
               # If the function has a return type already defined, it NEEDS to be either :unit or previously set to :none
               # Since we are not inside an assignment, the function return type can't be something else than :unit (void)
               case ret do
-                :none ->
-                  Map.put(map, fun, {:unit, infered_types})
-
-                :unit ->
+                r when r in [nil, :none, :unit] ->
                   Map.put(map, fun, {:unit, infered_types})
 
                 t ->
@@ -610,6 +619,7 @@ defmodule OCLPolyHok.TypeInference do
   end
 
   # Sets the type of a list of expressions based on a list of expected types.
+  # The parameters are on this order: (delta_map, expected_types, arguments, final_inferred_types)
   defp set_type_args(map, [], [], type), do: {map, type}
 
   defp set_type_args(map, [:none], a1, newtype) when is_tuple(a1) do
@@ -958,6 +968,10 @@ defmodule OCLPolyHok.TypeInference do
       {op, _, _args} when op in [:+, :-, :/, :*, :<=, :<, :>, :>=, :!=, :==, :!, :&&, :||] ->
         map
 
+      # Check if the expression is an array access (because if it is, we can just ignore)
+      {{:., _, [Access, :get]}, _, _args} ->
+        map
+
       {fun, _, args} when is_list(args) ->
         # Check if the function has a known type in the map
         type_fun = get_function_type(map, fun)
@@ -1016,10 +1030,15 @@ defmodule OCLPolyHok.TypeInference do
     case exp do
       # This is for array access, we return the type of the array element
       {{:., info_, [Access, :get]}, _, [{arg1, _, _}, _arg2]} ->
+        if logs_en do
+          IO.puts("fte: Array access. Type in map for #{inspect(arg1)} is #{inspect(map[arg1])}")
+        end
+
         case map[arg1] do
           :tint -> :int
           :tdouble -> :double
           :tfloat -> :float
+          :none -> :none
           nil -> :none
           ttt -> raise "Found type #{inspect(ttt)} for id #{inspect(arg1)} (#{inspect(info_)})"
         end
