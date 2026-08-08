@@ -123,5 +123,7 @@ finish = System.monotonic_time()
 
 BMP.gen_bmp_int(~c"julia.bmp", dim, image)
 
+IO.puts("Julia Set Example")
+IO.puts("=================")
 IO.puts("Output image size:    #{dim}px x #{dim}px")
 IO.puts("Time took:            #{System.convert_time_unit(finish - start, :native, :millisecond)}ms")
