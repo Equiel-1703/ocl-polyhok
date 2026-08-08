@@ -396,8 +396,7 @@ defmodule JIT do
       |> Enum.map(fn {p, _, _} -> {p, :none} end)
       |> Map.new()
 
-    # The return type is initially set to :none (unknown)
-    Map.put(delta, :return, :none)
+    delta
   end
 
   # Returns a list of atoms representing the names of the formal parameters of a device function.
@@ -484,7 +483,7 @@ defmodule JIT do
         {:ok, types} ->
           # Get the current function type signature in the format {return_type, [param_types]}
           fun_sig =
-            {Map.get(types, :return),
+            {Map.get(types, :return, :none),
              get_parameter_names_device(ast) |> Enum.map(fn p -> Map.get(types, p) end)}
 
           # Add it to the delta map with the function name as key
@@ -695,7 +694,7 @@ defmodule JIT do
         {fname, _, _para} = header
 
         # Travels the function body and adds a return statement if the function returns an expression
-        body = OCLPolyHok.TypeInference.add_return(Map.put(%{}, :return, :none), body)
+        body = OCLPolyHok.TypeInference.add_return(body)
 
         # Get list of functions called inside the device function
         funs = find_functions({:defd, ii, [header, [body]]})
