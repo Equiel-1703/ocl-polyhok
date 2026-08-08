@@ -112,14 +112,17 @@ defmodule OCLPolyHok.TypeInference do
 
             map
           else
+            # If the maps are not the same, we merge them
+            merged_map = merge_types_map(map, types)
+
             if logs_en do
               IO.puts(
                 "[TypeInference] Retrieved types map from type server is different from the provided map. Merging them to use the most updated info."
               )
+              IO.inspect(merged_map, label: "[TypeInference] Merged map")
             end
 
-            # If the maps are not the same, we merge them
-            merge_types_map(map, types)
+            merged_map
           end
       end
 
